@@ -27,10 +27,10 @@ contract Proof {
         address reviewer;
     }
 
-    mapping(bytes32 => ProofStruct) private proofIdToProof;
+    mapping(bytes32 => ProofStruct) internal proofIdToProof;
     bytes32[] private proofs;
 
-    mapping(bytes32 => uint) private pledgeIdToNumberOfSubmittedProofs;
+    mapping(bytes32 => uint) internal pledgeIdToNumberOfSubmittedProofs;
 
     // mapping(address => uint[]) private reviewerToPendingProofs;
     // mapping(address => uint[]) private reviewerToReviewedProofs;
@@ -43,7 +43,7 @@ contract Proof {
         _;
     }
 
-    modifier onlyProofState(ProofState _requiredState, bytes32 _proofId) {
+    modifier onlyProofState(bytes32 _proofId, ProofState _requiredState) {
         require(proofIdToProof[_proofId].state == _requiredState);
         _;
     }

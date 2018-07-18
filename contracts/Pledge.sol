@@ -1,8 +1,9 @@
 pragma solidity ^0.4.23;
 import "./Proof.sol";
 
-contract Pledge is Proof {
+contract Pledge {
 
+// not done yet
     enum PledgeState { Active, Completed, Expired }
 
     struct PledgeStruct {
@@ -13,21 +14,22 @@ contract Pledge is Proof {
         string detailsHash;
         uint collateral;
         uint index;
-        bool hasPendingProof;
+        address owner;
+        PledgeState state;
     }
 
-    mapping(bytes32 => PledgeStruct) private pledgeIdToPledge;
+    mapping(bytes32 => PledgeStruct) internal pledgeIdToPledge;
     bytes32[] private pledges;
 
-    mapping(address => uint) private userAddressToNumberOfPledges;
+    mapping(address => uint) internal userAddressToNumberOfPledges;
 
     event NewPledge(address indexed userAddress, uint index, bytes32 title);
     // event PldegeStateChange(address indexed userAddress, )
 
-    modifier onlyPledgeOwner(uint pledgeIndex) 
+    modifier onlyPledgeOwner(bytes32 _pledgeId) 
     {
         require(
-            msg.sender == pledges[pledgeIndex],
+            msg.sender == pledgeIdToPledge[_pledgeId].owner,
             "Sender not authorized."
         );
         _;
@@ -43,9 +45,10 @@ contract Pledge is Proof {
     modifier checkExpiry(bytes32 _pledgeId) {
         // don't expire if have pending proofs
 
-        if(pledgeIdToPledge[_pledgeId].expiresAt <= now){
+        if(pledgeIdToPledge[_pledgeId].expiresAt <= now) {
             pledgeIdToPledge[_pledgeId].state = PledgeState.Expired;
         }
+        _;
     }
 
     modifier hasState(PledgeState _requiredState, PledgeState _actualState) {
@@ -56,7 +59,11 @@ contract Pledge is Proof {
         _;
     }
 
-    function isPledge(bytes32 _pledgeId) private returns(bool isIndeed) {
+    function isPledge(bytes32 _pledgeId)
+        private 
+        view
+        returns(bool isIndeed) 
+    {
         if(pledges.length == 0) return false;
         return (pledges[pledgeIdToPledge[_pledgeId].index] == _pledgeId);
     }
@@ -74,7 +81,7 @@ contract Pledge is Proof {
     {
         // TODO - rethink pledge id stuff and do I need pledges array - will grwo indefinitely?
         // maybe id should be hash of title and expiresat, and sender?
-        bytes32 pledgeId = keccak256(msg.sender, userAddressToNumberOfPledges[msg.sender] + 1);
+        bytes32 pledgeId = keccak256(abi.encodePacked(msg.sender, userAddressToNumberOfPledges[msg.sender] + 1));
 
         require(!isPledge(pledgeId));
 
@@ -83,7 +90,8 @@ contract Pledge is Proof {
         pledgeIdToPledge[pledgeId].title = _title;
         pledgeIdToPledge[pledgeId].detailsHash = _detailsHash;
         pledgeIdToPledge[pledgeId].collateral = _collateral; 
-        pledgeIdToPledge[pledgeId].index = pledges.push(msg.sender) - 1;
+        pledgeIdToPledge[pledgeId].index = pledges.push(pledgeId) - 1;
+        pledgeIdToPledge[pledgeId].owner = msg.sender;
 
         userAddressToNumberOfPledges[msg.sender]++;
 
@@ -93,16 +101,33 @@ contract Pledge is Proof {
 
     function getPledge(bytes32 _pledgeId)
         public 
-        constant
-        returns( everything )
+        view
+        returns( 
+            address owner,
+            uint startTime,
+            uint expiresAt,  
+            uint numberOfProofs,
+            bytes32 title,
+            string detailsHash,
+            uint collateral
+        )
     {
-        require(isPledge(pledgeId));
-        return (pledgeIdToPledge[_pledgeId].owner);
+        require(isPledge(_pledgeId));
+
+        return (
+            pledgeIdToPledge[_pledgeId].owner,
+            pledgeIdToPledge[_pledgeId].startTime,
+            pledgeIdToPledge[_pledgeId].expiresAt,
+            pledgeIdToPledge[_pledgeId].numberOfProofs,
+            pledgeIdToPledge[_pledgeId].title,
+            pledgeIdToPledge[_pledgeId].detailsHash,
+            pledgeIdToPledge[_pledgeId].collateral
+        );
     }
 
     function getPledgeCount() 
         public
-        constant
+        view
         returns(uint count)
     {
         return pledges.length;
@@ -110,7 +135,7 @@ contract Pledge is Proof {
 
     function getPledgeAtIndex(uint index)
         public
-        constant
+        view
         returns(bytes32 pledgeId)
     {
         return pledges[index];

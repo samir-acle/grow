@@ -1,6 +1,7 @@
 pragma solidity ^0.4.23;
 import "./Proof.sol";
 import "./Pledge.sol";
+import "./UserAccount.sol";
 
 contract Pressure is UserAccount, Pledge, Proof {
 
@@ -15,18 +16,24 @@ contract Pressure is UserAccount, Pledge, Proof {
 
 //  should this be a modifier or private function or just require at beginning?
 // or should it be calculared off chain
-    modifier verifyAvailableFunds(address _userAddress, uint _amount) {
+    function verifyAvailableFunds(address _userAddress, uint _amount)
+        private
+        view
+        returns (bool hasFunds)
+    {
         // TODO -safe math 
-        require(addressToUser[_userAddress].availableDeposits >= _amount);
-        _;
+        return addressToUserAccount[_userAddress].availableDeposits >= _amount;
     }
 
-    modifier verifyLockedFunds(address _userAddress, uint amount) {
-        require(addressToUser[_userAddress].lockedDeposits >= amount);
-        _;
+    function verifyLockedFunds(address _userAddress, uint amount)
+        private
+        view
+        returns (bool hasFunds)
+    {
+        return addressToUserAccount[_userAddress].lockedDeposits >= amount;
     }
 
-    modifier verifyProofCount(uint _pledgeId) {
+    modifier verifyProofCount(bytes32 _pledgeId) {
         require(pledgeIdToNumberOfSubmittedProofs[_pledgeId] < pledgeIdToPledge[_pledgeId].numberOfProofs);
         _;
     }
@@ -58,7 +65,7 @@ contract Pressure is UserAccount, Pledge, Proof {
 
         pledgeIndex = createPledge(_expiresAt, _numberOfProofs, _title, _detailsHash, collateralPerProof);
         
-        addressToUser[msg.sender].lockedDeposits = addressToUser[msg.sender].lockedDeposits + msg.value;
+        addressToUserAccount[msg.sender].lockedDeposits = addressToUserAccount[msg.sender].lockedDeposits + msg.value;
     }
 
     function submitProof(
@@ -68,20 +75,21 @@ contract Pressure is UserAccount, Pledge, Proof {
         public
         onlyPledgeOwner(_pledgeId)
         verifyProofCount(_pledgeId)
-        verifyLockedFunds(msg.sender, pledgeIdToPledge[_pledgeId].collateral + proofFee)
         returns(uint proofIndex)
     {
+        // probs make msg.sender in private function
+        require(verifyLockedFunds(msg.sender, pledgeIdToPledge[_pledgeId].collateral + proofFee) == true);
         uint newProofIndex = createProof(_imageHash, _pledgeId);
 
         // TODO - maybe not needed
-        pledgeIdToPledge[_pledgeId].hasPendingProof = true;
+        // pledgeIdToPledge[_pledgeId].hasPendingProof = true;
 
         // if has locked funds use them
         // if has available funds lock them
         // or else throw
 
         // lockDepositForProof(_pledgeId);
-        transferIntoPot(pledgeFee, msg.sender);
+        transferIntoPot(proofFee, msg.sender);
         return newProofIndex;
     }
 
@@ -90,12 +98,12 @@ contract Pressure is UserAccount, Pledge, Proof {
     )
         public
         onlyReviewer(_proofId)
-        verifyAvailableFunds(proofIdToProof[_proofId].pledgeId)
-        onlyProofState(ProofState.Pending)
+        onlyProofState(_proofId, ProofState.Pending)
         // returns()
     {
+        require(verifyAvailableFunds(msg.sender, pledgeIdToPledge[proofIdToProof[_proofId].pledgeId].collateral) == true);
         // TODO - move this into CRUD update functionality?
-        lockDepositForProof(proofIdToProof[_proofId].pledgeId);
+        lockDepositForProof(msg.sender, proofIdToProof[_proofId].pledgeId);
         proofIdToProof[_proofId].state = ProofState.Accepted;
 
     //     Reviewer gets portion of pot
@@ -108,12 +116,12 @@ contract Pressure is UserAccount, Pledge, Proof {
     )
         public
         onlyReviewer(_proofId)
-        verifyFunds(proofIdToProof[_proofId].pledgeId)
-        onlyProofState(ProofState.Pending)
+        onlyProofState(_proofId, ProofState.Pending)
         // returns()
     {
+        require(verifyAvailableFunds(msg.sender, pledgeIdToPledge[proofIdToProof[_proofId].pledgeId].collateral) == true);
         // TODO - move this into CRUD update functionality?
-        lockDepositForProof(_pledgeId);
+        lockDepositForProof(msg.sender, proofIdToProof[_proofId].pledgeId);
         proofIdToProof[_proofId].state = ProofState.Rejected;
     //     Reviewer gets portion of pot
     //     Reviewer approves - both pledger and reviewer get their deposits back.
@@ -121,14 +129,14 @@ contract Pressure is UserAccount, Pledge, Proof {
     }
 
     function lockDepositForProof(
-        uint _pledgeId,
-        address _userAddress
+        address _userAddress,
+        bytes32 _pledgeId
     ) 
         private
     {
         uint proofDeposit = pledgeIdToPledge[_pledgeId].collateral;
-        addressToUser[_userAddress].availableDeposits = addressToUser[_userAddress].availableDeposits - proofDeposit;
-        addressToUser[_userAddress].lockedDeposits = addressToUser[_userAddress].lockedDeposits + proofDeposit;
+        addressToUserAccount[_userAddress].availableDeposits = addressToUserAccount[_userAddress].availableDeposits - proofDeposit;
+        addressToUserAccount[_userAddress].lockedDeposits = addressToUserAccount[_userAddress].lockedDeposits + proofDeposit;
     }
 
     // this all maybe should be different contract?  contract per pledge?  that way money is more secure?
@@ -139,7 +147,7 @@ contract Pressure is UserAccount, Pledge, Proof {
     )
         private
     {
-        userAddressToUserAccount[_userAddress].availableDeposits = userAddressToUserAccount[_userAddress].availableDeposits + _amount;
+        addressToUserAccount[_userAddress].availableDeposits = addressToUserAccount[_userAddress].availableDeposits + _amount;
     }
 
     function transferIntoPot(
@@ -148,7 +156,7 @@ contract Pressure is UserAccount, Pledge, Proof {
     )
         private   
     {
-        userAddressToUserAccount[_userAddress].lockedDeposits = userAddressToUserAccount[_userAddress].lockedDeposits - _amount;
+        addressToUserAccount[_userAddress].lockedDeposits = addressToUserAccount[_userAddress].lockedDeposits - _amount;
     }
 
     // assign reviewer?

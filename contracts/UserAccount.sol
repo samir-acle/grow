@@ -1,7 +1,7 @@
 pragma solidity ^0.4.23;
 import "./Pledge.sol";
 
-contract UserAccount is Pledge {
+contract UserAccount {
 
     // struct with key to data
     // array with key
@@ -13,7 +13,7 @@ contract UserAccount is Pledge {
         uint availableDeposits;
     }
 
-    mapping(address => User) private addressToUser;
+    mapping(address => User) internal addressToUserAccount;
     address[] private users;
 
     event LogNewUser   (address indexed userAddress, uint index);
@@ -25,13 +25,13 @@ contract UserAccount is Pledge {
         _;
     }
 
-    function isUser(address userAddress)
+    function isUser(address _userAddress)
         public 
         view
         returns(bool isIndeed) 
     {
         if(users.length == 0) return false;
-        return (users[addressToUser[userAddress].index] == userAddress);
+        return (users[addressToUserAccount[_userAddress].index] == _userAddress);
     }
 
     function insertUser(
@@ -41,10 +41,10 @@ contract UserAccount is Pledge {
         returns(uint index)
     {
         require(!isUser(userAddress));
-        addressToUser[userAddress].index = users.push(userAddress) - 1;
+        addressToUserAccount[userAddress].index = users.push(userAddress) - 1;
         LogNewUser(
             userAddress, 
-            addressToUser[userAddress].index);
+            addressToUserAccount[userAddress].index);
         return users.length-1;
     }
 
@@ -54,7 +54,7 @@ contract UserAccount is Pledge {
         returns(uint index)
     {
         require(isUser(userAddress));
-        return addressToUser[userAddress].index;
+        return addressToUserAccount[userAddress].index;
     }
 
     function getUserCount() 
