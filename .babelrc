@@ -17,6 +17,7 @@
     ],
     "plugins": [
         "syntax-dynamic-import",
+        "regenerator-transform",
         "transform-class-properties"
     ]
 }

@@ -19,6 +19,19 @@ TODO - replace constants with view?
 
 Auto-approval if not accepted or rejected?
 
+### Front End
+TODOs - 
+1) Create a Pledge
+2) View my existing pledges
+3) Submit proof
+4) View own proofs and status
+5) Stake completed pledges
+6) Approve/Reject Proofs
+
+Stretch - 
+1) Disputes
+2) Can see others pledges (but not proofs)
+
 
 ### Game Theory
 This section needs expanding.
