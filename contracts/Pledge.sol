@@ -18,10 +18,12 @@ contract Pledge {
         PledgeState state;
     }
 
+    // TODO - mapping to mapping for pledges you need to proof?
+
     mapping(bytes32 => PledgeStruct) internal pledgeIdToPledge;
     bytes32[] private pledges;
 
-    mapping(address => uint) internal userAddressToNumberOfPledges;
+    mapping(address => uint) public userAddressToNumberOfPledges;
 
     event NewPledge(address indexed userAddress, uint index, bytes32 title);
     // event PldegeStateChange(address indexed userAddress, )
@@ -80,7 +82,6 @@ contract Pledge {
         returns(uint index)
     {
         // TODO - rethink pledge id stuff and do I need pledges array - will grwo indefinitely?
-        // maybe id should be hash of title and expiresat, and sender?
         bytes32 pledgeId = keccak256(abi.encodePacked(msg.sender, userAddressToNumberOfPledges[msg.sender] + 1));
 
         require(!isPledge(pledgeId));

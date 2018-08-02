@@ -20,5 +20,5 @@ module.exports = {
       network_id: "*" // Match any network id
     }
   },
-  build: "parcel index.html --open",
+  build: "truffle migrate --reset && parcel index.html --open",
 };

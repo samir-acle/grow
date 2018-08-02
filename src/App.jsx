@@ -1,6 +1,11 @@
 import React, { Component } from "react";
 import { drizzleConnect } from "drizzle-react";
-import { ContractData, ContractForm } from "drizzle-react-components";
+import { Box, Grid, Button } from 'grommet';
+
+import NewPledge from "./Pledge/NewPledge";
+import Pledges from "./Pledge/Pledges";
+
+import { BrowserRouter as Router, Link, Route } from 'react-router-dom';
 
 class App extends Component {
   render() {
@@ -8,40 +13,42 @@ class App extends Component {
 
     if (drizzleStatus.initialized) {
       return (
-        <div className="App">
-          <header className="App-header">
-            <h1 className="App-title">Social Pressure</h1>
-            {/* <p>
-              <strong>Total Supply</strong>:{" "}
-              <ContractData
-                contract="TutorialToken"
-                method="totalSupply"
-                methodArgs={[{ from: accounts[0] }]}
-              />{" "}
-              <ContractData
-                contract="TutorialToken"
-                method="symbol"
-                hideIndicator
-              />
-            </p>
-            <p> */}
-              {/* <strong>My Balance</strong>:{" "}
-              <ContractData
-                contract="TutorialToken"
-                method="balanceOf"
-                methodArgs={[accounts[0]]}
-              />
-            </p> */}
-            <h3>Create Pledge</h3>
-          </header>
-          <div className="App-intro">
-            <ContractForm
-              contract="Pressure"
-              method="initPledge"
-              labels={["End Date", "Number of Proofs", "Title", "Details for Proof"]}
-            />
+        <Router>
+          <div className="App">
+            {/* check grid availability */}
+            {/* <Grid
+              areas={[
+                { name: 'nav', start: [0, 0], end: [0, 1] },
+                { name: 'active', start: [1, 0], end: [2, 0] },
+                { name: 'history', start: [1, 1], end: [2, 1] },
+              ]}
+              columns={['small', 'flex']}
+              rows={['small', 'medium']}
+              gap='small'
+            > */}
+              {/* <Box grideArea='nav' background='brand'> */}
+                <Link to='/pledges'>View Pledges</Link>
+                <Link to='/pledges/new'>Create Pledge</Link>
+              {/* </Box> */}
+
+              {/* <Box grideArea='active' background='accent-3'> */}
+                <Route exact={true} path="/pledges" component={Pledges} />
+                <Route path="/pledges/new" component={NewPledge} />
+              {/* </Box> */}
+
+              {/* <Box grideArea='history' background='accent-1' /> */}
+            {/* </Grid> */}
+
+            {/* <header className="App-header">
+              <h1 className="App-title">Social Pressure</h1>
+              <h3>Create Pledge</h3>
+            </header>
+            <div className="App-intro">
+              <Pledge />
+            </div> */}
+
           </div>
-        </div>
+        </Router>
       );
     }
 
@@ -53,7 +60,6 @@ const mapStateToProps = state => {
   return {
     accounts: state.accounts,
     drizzleStatus: state.drizzleStatus,
-    TutorialToken: state.contracts.TutorialToken
   };
 };
 

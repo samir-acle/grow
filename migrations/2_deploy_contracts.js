@@ -1,5 +1,5 @@
-const SocialPressure = artifacts.require('./SocialPressure.sol');
+const Pressure = artifacts.require('./Pressure.sol');
 
 module.exports = function(deployer) {
-    deployer.deploy(SocialPressure);
+    deployer.deploy(Pressure);
 };

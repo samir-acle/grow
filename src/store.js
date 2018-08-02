@@ -11,7 +11,7 @@ const composeEnhancers = window.__REDUX_DEVTOOLS_EXTENSION_COMPOSE__ || compose;
 export const drizzleOptions = {
   contracts: [
       Pressure,
-  ],
+  ]
 };
 
 const initialState = {
