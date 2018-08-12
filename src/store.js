@@ -3,14 +3,14 @@ import createSagaMiddleware from 'redux-saga';
 import rootSaga from './rootSaga';
 import { createStore, applyMiddleware, compose } from 'redux';
 import reducer from './reducer';
-import Pressure from 'Contracts/Pressure.json';
+import Grow from 'Contracts/Grow.json';
 
 const sagaMiddleware = createSagaMiddleware();
 const composeEnhancers = window.__REDUX_DEVTOOLS_EXTENSION_COMPOSE__ || compose;
 
 export const drizzleOptions = {
   contracts: [
-      Pressure,
+      Grow,
   ]
 };
 

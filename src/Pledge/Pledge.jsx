@@ -3,32 +3,48 @@ import PropTypes from 'prop-types';
 import moment from 'moment';
 import { drizzleConnect } from 'drizzle-react';
 import _ from 'lodash';
-import { storeDataKey } from './actions';
+import { Box } from 'grommet';
+import IpfsRetriever from '../IPFS/IpfsRetriever';
+import ContractStateRetriever from '../ContractStateRetriever';
 
+export const PledgeDetails = ({ title, what, where, when, why }) => {
+    return (
+        <Box>
+            <h2>Pledge Details</h2>
+            <p>Title: {title}</p>
+            <p>What: {what}</p>
+            <p>Where: {where}</p>
+            <p>When: {when}</p>
+            <p>Why: {why}</p>
+        </Box>
+    )
+}
 
 class Pledge extends Component {
+
     constructor(props, context) {
         super(props);
-        this.contract = context.drizzle.contracts.Pressure;
-
-        // should this be instance var?  is this antipattern?
-        this.pledgeId = context.drizzle.web3.utils.soliditySha3(props.account, props.index);
-        this.dataKey = this.contract.methods.getPledge.cacheCall(this.pledgeId);
+        this.state = {
+            pledgeId: context.drizzle.web3.utils.soliditySha3(props.account, props.index),
+        };
     }
 
     render() {
-        const pledge = this.props.contract.getPledge[this.dataKey];
-
-        if (!pledge || !pledge.value) return null;
-
         return (
-            <div>
-                <p>owner: {pledge.value.owner}</p>
-                <p>collateral: {pledge.value.collateral}</p>
-                <p>title: {pledge.value.title}</p>
-                <p>expiresAt: {pledge.value.expiresAt}</p>
-                <p>detailsHash: {pledge.value.detailsHash}</p>
-            </div>
+            <ContractStateRetriever contract="Grow" method="getPledge" args={[this.state.pledgeId]} render={({ contractData }) => (
+                <Box>
+                    <Box>
+                        <p>owner: {contractData.owner}</p>
+                        <p>collateral: {contractData.collateral}</p>
+                        <p>numOfProofs: {contractData.numOfProofs}</p>
+                        <div>proofs: {contractData.proofs.map(id => <p>{id}</p>)}</div>
+                    </Box>
+
+                    <IpfsRetriever hash={contractData.metadataHash} render={({ data }) => (
+                        <PledgeDetails {...data} />
+                    )} />
+                </Box>
+            )}/>
         )
     }
 }
@@ -47,7 +63,7 @@ const mapDispatchToProps = dispatch => {
 const mapStateToProps = state => {
     return {
         accounts: state.accounts,
-        contract: state.contracts.Pressure,
+        contract: state.contracts.Grow,
     };
 };
 

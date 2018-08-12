@@ -4,10 +4,31 @@
 - pledge: 
 
 ### Design Patterns
+did not use - Factory Pattern (to save on gas costs for deploying a new contract per Pledge)
+
 Solidity CRUD
+
+
 Commit Reveal
-Pull 
-Upgradability (can to variables in constructor)
+
+
+Pull
+
+
+Upgradability
+  - Looked into different options including separate Data and Logic contracts and Proxy contracts. Decided to use the Unstructured Storage Pattern provided by ZeppelinOS due to it's extensive testing and security audits.
+
+
+Use Well Tested Secure Existing Code
+
+
+Circuit Breaker / emergency stop
+
+
+SafeMath
+
+### Common Attacks Prevention
+
 
 
 ### Security Concerns
@@ -71,3 +92,12 @@ What happens if reviewers collude with potential disputer resolvers?
 What else fills up the pot?
 How to make sure pot remains filled?
 Slashing based on proof number?
+
+
+
+#####
+KNOWN BUGS - FUTURE improvemtns
+  - time select for expiration is not inclusive
+  - weak front end validation
+  - Currency from WEI to options   (hash to bi fexied)
+  - MultiHash is hardcoded for current IPFS for now

@@ -3,6 +3,11 @@ import "./Pledge.sol";
 
 contract UserAccount {
 
+    // make this just user account to eth
+    // can have deposit and withdraw functions
+    // ERC721 will be in its contract
+    // stake will be in its contract
+
     // struct with key to data
     // array with key
 

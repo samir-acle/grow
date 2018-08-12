@@ -11,6 +11,10 @@
  *     gasPrice: 10000000000,
  *   },
  */
+require('babel-register')({
+  ignore: /node_modules\/(?!openzeppelin-solidity\/test\/helpers)/
+})
+require('babel-polyfill')
 
 module.exports = {
   networks: {
@@ -20,5 +24,5 @@ module.exports = {
       network_id: "*" // Match any network id
     }
   },
-  build: "truffle migrate --reset && parcel index.html --open",
+  build: "truffle compile && truffle migrate && parcel index.html --open",
 };

@@ -16,7 +16,7 @@ class App extends Component {
         <Router>
           <div className="App">
             {/* check grid availability */}
-            {/* <Grid
+            <Grid
               areas={[
                 { name: 'nav', start: [0, 0], end: [0, 1] },
                 { name: 'active', start: [1, 0], end: [2, 0] },
@@ -25,28 +25,19 @@ class App extends Component {
               columns={['small', 'flex']}
               rows={['small', 'medium']}
               gap='small'
-            > */}
-              {/* <Box grideArea='nav' background='brand'> */}
+            >
+              <Box grideArea='nav' background='brand'>
                 <Link to='/pledges'>View Pledges</Link>
                 <Link to='/pledges/new'>Create Pledge</Link>
-              {/* </Box> */}
+              </Box>
 
-              {/* <Box grideArea='active' background='accent-3'> */}
+              <Box grideArea='active' background='accent-3'>
                 <Route exact={true} path="/pledges" component={Pledges} />
                 <Route path="/pledges/new" component={NewPledge} />
-              {/* </Box> */}
+              </Box>
 
-              {/* <Box grideArea='history' background='accent-1' /> */}
-            {/* </Grid> */}
-
-            {/* <header className="App-header">
-              <h1 className="App-title">Social Pressure</h1>
-              <h3>Create Pledge</h3>
-            </header>
-            <div className="App-intro">
-              <Pledge />
-            </div> */}
-
+              <Box grideArea='history' background='accent-1' />
+            </Grid>
           </div>
         </Router>
       );
