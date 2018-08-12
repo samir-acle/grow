@@ -25,9 +25,9 @@ ContractStateRetriever.contextTypes = {
 };
 
 ContractStateRetriever.propTypes = {
-    contract: PropTypes.string.required,
-    method: PropTypes.string.required,
-    render: PropTypes.func.required,
+    contract: PropTypes.string.isRequired,
+    method: PropTypes.string.isRequired,
+    render: PropTypes.func.isRequired,
 };
 
 const mapDispatchToProps = dispatch => {

@@ -3,9 +3,16 @@ import PropTypes from 'prop-types';
 import moment from 'moment';
 import { drizzleConnect } from 'drizzle-react';
 import _ from 'lodash';
-import { Box } from 'grommet';
+import { Box, Button } from 'grommet';
 import IpfsRetriever from '../IPFS/IpfsRetriever';
 import ContractStateRetriever from '../ContractStateRetriever';
+import { Link } from 'react-router-dom';
+
+const PledgeState = {
+    '0': 'Active',
+    '1': "Completed",
+    '2': 'Expired',
+};
 
 export const PledgeDetails = ({ title, what, where, when, why }) => {
     return (
@@ -20,7 +27,62 @@ export const PledgeDetails = ({ title, what, where, when, why }) => {
     )
 }
 
-class Pledge extends Component {
+// maybe HOC for active, expired, all, completed states...  could share with prood
+
+export const FilterPledge = ({ pledge, requiredStates, id }) => {
+    if (!requiredStates.includes(PledgeState[pledge.pledgeState])) return null;
+
+    return (
+        <PledgeListElement pledgeData={pledge} id={id} />
+    )
+};
+
+const PledgeListElement = ({ pledgeData, id }, context) => {
+    return (
+        <Box>
+            <IpfsRetriever hash={pledgeData.metadataHash} render={({ data }) => (
+                <h2>{data.title}</h2>
+            )} />
+            <Link to={`/pledges/${id}`}>NewPledge</Link>
+            {/* <Button label="view" onClick={() => context.router.history.push(`/pledges/${id}`)} /> */}
+        </Box>
+    )
+};
+
+PledgeListElement.contextTypes = {
+    router: PropTypes.shape({
+        history: PropTypes.object.isRequired,
+    }),
+};
+
+export const PledgeView = (props) => {
+    const { id } = props.match.params;
+
+    return (
+        <ContractStateRetriever contract="Grow" method="getPledge" args={[id]} render={({ contractData }) => (
+            <Pledge pledgeData={contractData} />
+        )} />
+    )
+}
+
+const Pledge = ({ pledgeData }) => {
+    return (
+        <Box>
+            <Box>
+                <p>owner: {pledgeData.owner}</p>
+                <p>collateral: {pledgeData.collateral}</p>
+                <p>numOfProofs: {pledgeData.numOfProofs}</p>
+                <div>proofs: {pledgeData.proofs.map(id => <p>{id}</p>)}</div>
+            </Box>
+
+            <IpfsRetriever hash={pledgeData.metadataHash} render={({ data }) => (
+                <PledgeDetails {...data} />
+            )} />
+        </Box>
+    )
+};
+
+class PledgeContainer extends Component {
 
     constructor(props, context) {
         super(props);
@@ -32,27 +94,18 @@ class Pledge extends Component {
     render() {
         return (
             <ContractStateRetriever contract="Grow" method="getPledge" args={[this.state.pledgeId]} render={({ contractData }) => (
-                <Box>
-                    <Box>
-                        <p>owner: {contractData.owner}</p>
-                        <p>collateral: {contractData.collateral}</p>
-                        <p>numOfProofs: {contractData.numOfProofs}</p>
-                        <div>proofs: {contractData.proofs.map(id => <p>{id}</p>)}</div>
-                    </Box>
-
-                    <IpfsRetriever hash={contractData.metadataHash} render={({ data }) => (
-                        <PledgeDetails {...data} />
-                    )} />
-                </Box>
-            )}/>
+                <FilterPledge pledge={contractData} requiredStates={this.props.requiredStates} id={this.state.pledgeId} />
+            )} />
         )
     }
 }
 
-Pledge.contextTypes = {
+PledgeContainer.contextTypes = {
     drizzle: PropTypes.object,
     drizzleStore: PropTypes.object,
 };
+
+// prop types
 
 const mapDispatchToProps = dispatch => {
     return {
@@ -67,4 +120,4 @@ const mapStateToProps = state => {
     };
 };
 
-export default drizzleConnect(Pledge, mapStateToProps, mapDispatchToProps);
+export default drizzleConnect(PledgeContainer, mapStateToProps, mapDispatchToProps);

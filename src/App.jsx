@@ -4,8 +4,10 @@ import { Box, Grid, Button } from 'grommet';
 
 import NewPledge from "./Pledge/NewPledge";
 import Pledges from "./Pledge/Pledges";
+// import Pledges2 from "../Pledges2";
+import { PledgeView } from "./Pledge/Pledge";
 
-import { BrowserRouter as Router, Link, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Link, Route, Switch } from 'react-router-dom';
 
 class App extends Component {
   render() {
@@ -16,7 +18,7 @@ class App extends Component {
         <Router>
           <div className="App">
             {/* check grid availability */}
-            <Grid
+            {/* <Grid
               areas={[
                 { name: 'nav', start: [0, 0], end: [0, 1] },
                 { name: 'active', start: [1, 0], end: [2, 0] },
@@ -25,19 +27,40 @@ class App extends Component {
               columns={['small', 'flex']}
               rows={['small', 'medium']}
               gap='small'
-            >
-              <Box grideArea='nav' background='brand'>
-                <Link to='/pledges'>View Pledges</Link>
-                <Link to='/pledges/new'>Create Pledge</Link>
+            > */}
+              <Box background='brand'>
+                {/* Placeholder for logo */}
+                <Link to='/pledges'>Pledge</Link>
+                <div>Review</div>
+                <div>Account</div>
               </Box>
 
-              <Box grideArea='active' background='accent-3'>
-                <Route exact={true} path="/pledges" component={Pledges} />
-                <Route path="/pledges/new" component={NewPledge} />
+              <Box background='accent-3'>
+                <Route path="/pledges" component={Pledges} />
               </Box>
+
+              {/* TODO - consistantyl use render props? */}
+              <Box>
+                <Switch>
+                  <Route exact={true} path="/pledges/new" component={NewPledge} />
+                  <Route exact={true} path="/pledges/:id" render={props => <PledgeView key={props.match.params.id} {...props} />} />
+                </Switch>
+              </Box>
+
+              <Box>
+                <div>Proof Stuff</div>
+              </Box>
+                {/* <Route path="/proofs/:id" component={ProofView} /> */}
+                {/* <Route exact={true} path="/proofs" component={Proofs} /> */}
+                {/* <Route path="/proofs/submit" component={NewProof} /> */}
+                {/* <Link to='/pledges/new'>Create Pledge</Link>
+                <Link to='/proofs'>View Proofs</Link>
+                <Link to='/proofs/submit'>Submit Proof</Link> */}
+
+
 
               <Box grideArea='history' background='accent-1' />
-            </Grid>
+            {/* </Grid> */}
           </div>
         </Router>
       );

@@ -308,7 +308,7 @@ class NewPledge extends Component {
         }
 
         if (this.state.completedPledge) {
-            return <Redirect to='/' />
+            return <Redirect to='/pledges' />
         }
 
         return (
