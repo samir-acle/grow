@@ -12,6 +12,7 @@ contract Proof is IpfsStorage {
         address indexed userAddress, 
         bytes32 indexed pledgeId,
         uint index, 
+        uint indexInPledge, 
         uint collateral
     );
 
@@ -37,6 +38,7 @@ contract Proof is IpfsStorage {
         MultiHash metadata;
         bytes32 pledgeId;
         uint index;
+        uint indexInPledge;
         uint expiresAt;
         uint collateral;
         address reviewer;
@@ -62,26 +64,28 @@ contract Proof is IpfsStorage {
     function createEmptyProof(
         bytes32 _pledgeId, 
         uint _expiresAt,
-        uint _collateral
+        uint _collateral,
+        uint _proofNumberInPledge
     ) 
         internal 
         returns (bytes32 proofId) 
     {
-        // change this id
-        proofId = keccak256(abi.encodePacked(msg.sender, proofs.length + 1));
+        proofId = keccak256(abi.encodePacked(_pledgeId, _proofNumberInPledge));
 
         require(!isProof(proofId), "Proof must not exist");
 
         proofIdToProof[proofId].pledgeId = _pledgeId;
         proofIdToProof[proofId].expiresAt = _expiresAt;
         proofIdToProof[proofId].index = proofs.push(proofId) - 1;
+        proofIdToProof[proofId].indexInPledge = _proofNumberInPledge;
         proofIdToProof[proofId].state = ProofState.Pending;
         proofIdToProof[proofId].collateral = _collateral;
 
         emit NewProof(
             msg.sender, 
             proofIdToProof[proofId].pledgeId,
-            proofIdToProof[proofId].index, 
+            proofIdToProof[proofId].index,
+            proofIdToProof[proofId].indexInPledge, 
             proofIdToProof[proofId].collateral
         );
 
@@ -102,6 +106,7 @@ contract Proof is IpfsStorage {
         if (now <= proofIdToProof[_proofId].expiresAt) {
             proofIdToProof[_proofId].metadata = createIpfsMultiHash(_metadata);
             proofIdToProof[_proofId].state = ProofState.Submitted;
+            proofIdToProof[_proofId].expiresAt = now + 7 days;
             wasSubmitted = true;
 
             // call staking contract to get size of stakers
@@ -141,7 +146,7 @@ contract Proof is IpfsStorage {
     }
 
     function hasProofState(bytes32 _proofId, ProofState _requiredState) internal view returns (bool isValidState) {
-        require(proofIdToProof[_proofId].state == _requiredState);
+        return proofIdToProof[_proofId].state == _requiredState;
     }
     // mapping(address => uint[]) private reviewerToPendingProofs;
     // mapping(address => uint[]) private reviewerToReviewedProofs;
@@ -170,6 +175,7 @@ contract Proof is IpfsStorage {
         ) 
     {
         require(isProof(_proofId));
+
         return (
             proofIdToProof[_proofId].metadata.hashDigest,
             proofIdToProof[_proofId].pledgeId,
@@ -180,6 +186,13 @@ contract Proof is IpfsStorage {
             proofIdToProof[_proofId].state
         );
     }
+
+    // function getProofState(bytes32 _proofId) public view returns(ProofState state) {
+    //     require(isProof(_proofId));
+    //     return (
+    //         proofIdToProof[_proofId].state
+    //     );
+    // }
 
     // function getTotalProofCount()
     //     public

@@ -7,6 +7,7 @@ import { Box, Button } from 'grommet';
 import IpfsRetriever from '../IPFS/IpfsRetriever';
 import ContractStateRetriever from '../ContractStateRetriever';
 import { Link } from 'react-router-dom';
+import Proofs from '../Proof/Proofs';
 
 const PledgeState = {
     '0': 'Active',
@@ -43,7 +44,7 @@ const PledgeListElement = ({ pledgeData, id }, context) => {
             <IpfsRetriever hash={pledgeData.metadataHash} render={({ data }) => (
                 <h2>{data.title}</h2>
             )} />
-            <Link to={`/pledges/${id}`}>NewPledge</Link>
+            <Link to={`/pledges/${id}`}>View Pledge</Link>
             {/* <Button label="view" onClick={() => context.router.history.push(`/pledges/${id}`)} /> */}
         </Box>
     )
@@ -60,8 +61,11 @@ export const PledgeView = (props) => {
 
     return (
         <ContractStateRetriever contract="Grow" method="getPledge" args={[id]} render={({ contractData }) => (
-            <Pledge pledgeData={contractData} />
-        )} />
+            <Box>
+                <Pledge pledgeData={contractData} />
+                <Proofs proofIds={contractData.proofs} pledgeId={id} />
+            </Box>
+        )}/>
     )
 }
 

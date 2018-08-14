@@ -6,6 +6,7 @@ import NewPledge from "./Pledge/NewPledge";
 import Pledges from "./Pledge/Pledges";
 // import Pledges2 from "../Pledges2";
 import { PledgeView } from "./Pledge/Pledge";
+import NewProofContainer from "./Proof/NewProofContainer";
 
 import { BrowserRouter as Router, Link, Route, Switch } from 'react-router-dom';
 
@@ -44,14 +45,11 @@ class App extends Component {
                 <Switch>
                   <Route exact={true} path="/pledges/new" component={NewPledge} />
                   <Route exact={true} path="/pledges/:id" render={props => <PledgeView key={props.match.params.id} {...props} />} />
+                  <Route path="/proofs/:proofId/submit" render={props => <NewProofContainer key={props.match.params.proofId} proofId={props.match.params.proofId} {...props} />} />
                 </Switch>
               </Box>
 
-              <Box>
-                <div>Proof Stuff</div>
-              </Box>
                 {/* <Route path="/proofs/:id" component={ProofView} /> */}
-                {/* <Route exact={true} path="/proofs" component={Proofs} /> */}
                 {/* <Route path="/proofs/submit" component={NewProof} /> */}
                 {/* <Link to='/pledges/new'>Create Pledge</Link>
                 <Link to='/proofs'>View Proofs</Link>

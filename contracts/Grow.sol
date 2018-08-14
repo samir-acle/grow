@@ -129,7 +129,7 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
         bytes32[] storage proofs = pledgeIdToPledge[_pledgeId].proofs;
 
         for (uint i = 0; i < _proofExpirations.length; i++) {
-            bytes32 proofId = createEmptyProof(_pledgeId, _proofExpirations[i], _collateralPerProof);
+            bytes32 proofId = createEmptyProof(_pledgeId, _proofExpirations[i], _collateralPerProof, i);
             proofs[i] = proofId;
         }
     }

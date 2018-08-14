@@ -46,6 +46,8 @@ contract Pledge is Pausable, IpfsStorage, Proof {
     bytes32[] private pledges;
 
     mapping(address => uint) public userAddressToNumberOfPledges;
+
+    // toDO - might not need this
     mapping(bytes32 => uint) internal pledgeIdToLastSubmittedProofIndex;
 
     event NewPledge(address indexed userAddress, uint index, bytes32 ipfsHash);

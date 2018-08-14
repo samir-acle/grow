@@ -101,3 +101,8 @@ KNOWN BUGS - FUTURE improvemtns
   - weak front end validation
   - Currency from WEI to options   (hash to bi fexied)
   - MultiHash is hardcoded for current IPFS for now
+  - proofId and pledgeIds are sometimes same...
+
+
+
+Idea for expiring things - get a portion of the expired stuff?
