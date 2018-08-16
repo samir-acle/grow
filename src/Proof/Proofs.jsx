@@ -50,7 +50,7 @@ class Proof extends Component {
     render() {
         return (
             <Box background={`status-${ProofState[this.props.state].status}`}>
-                <Link to={`/proofs/${this.props.proofId}/submit`}>Submit Proof</Link>
+                {ProofState[this.props.state].display === 'Pending' && <Link to={`/proofs/${this.props.proofId}/submit`}>Submit Proof</Link>}
                 <Text>{ProofState[this.props.state].display}</Text>
             </Box>
         )

@@ -1,8 +1,9 @@
 pragma solidity ^0.4.23;
+import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 import "./Proof.sol";
 import "./Pledge.sol";
 import "./UserAccount.sol";
-import "openzeppelin-solidity/contracts/math/SafeMath.sol";
+import "./GrowToken.sol";
 
 /** @title Grow. */
 contract Grow is Pausable, UserAccount, Proof, Pledge {
@@ -11,6 +12,7 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
     // EVENTS:
     // ============
     event ProofFeeUpdated(address indexed ownerAddress, uint newProofFee);
+    event GrowTokenUpdated(address indexed ownerAddress, address growTokenAddress);
 
     // ============
     // DATA STRUCTURES:
@@ -24,6 +26,7 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
 
     uint public proofFee;
     uint private pot;
+    GrowToken private growToken;
 
     // ============
     // MODIFIERS:
@@ -35,8 +38,17 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
     // 10 finney for now...
     // definitely should be adjusted based on gas price/cost of approving (rather than price of total collateral)
 
-    constructor (uint _proofFee) public {
+    constructor (uint _proofFee, address _growTokenAddress) public {
+        growToken = GrowToken(_growTokenAddress);
         proofFee = _proofFee;
+    }
+
+    /** @dev Sets the growToken contract address. Only owner is authorized.
+        * @param _address The address of the grow token contract to use.
+        */
+    function setGrowToken(address _address) public onlyOwner {
+        growToken = GrowToken(_address);
+        emit GrowTokenUpdated(msg.sender, _address);
     }
 
     /** @dev Sets the proofFee. Only owner is authorized.
@@ -77,6 +89,7 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
 
         pledgeId = createPledge(_hashDigest, numOfProofs);
         createEmptyProofs(pledgeId, _proofExpirations, collateralPerProof);
+        mintTokenIfFirstPledge(_hashDigest);
         return pledgeId;
     }
 
@@ -129,7 +142,7 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
         bytes32[] storage proofs = pledgeIdToPledge[_pledgeId].proofs;
 
         for (uint i = 0; i < _proofExpirations.length; i++) {
-            bytes32 proofId = createEmptyProof(_pledgeId, _proofExpirations[i], _collateralPerProof, i);
+            bytes32 proofId = createEmptyProof(_pledgeId, _proofExpirations[i], _collateralPerProof, i + 1);
             proofs[i] = proofId;
         }
     }
@@ -153,6 +166,12 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
 
     function proofMatchesPledge(bytes32 _proofId, bytes32 _pledgeId) private returns (bool isValid) {
         return proofIdToProof[_proofId].pledgeId == _pledgeId;
+    }
+
+    function mintTokenIfFirstPledge(bytes32 _hashDigest) private returns (bool tokenWasMinted) {
+        if (userAddressToNumberOfPledges[msg.sender] == 1) {
+            growToken.mint(_hashDigest, msg.sender);
+        }
     }
 }
     // ABOVE THIS IS TESTED AND SHOULD FOLLOW STYLE GUIDE!!

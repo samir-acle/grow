@@ -82,10 +82,6 @@ contract Pledge is Pausable, IpfsStorage, Proof {
         _;
     }
 
-    function getPledgeOwner(bytes32 _pledgeId) public returns (address ownerAddress) {
-        ownerAddress = pledgeIdToPledge[_pledgeId].owner;
-    } 
-
     // modifier hasState(PledgeState _requiredState, bytes32 _pledgeId) {
     //     require(
     //         pledgeIdToPledge[_pledgeId].state == _requiredState,

@@ -102,7 +102,18 @@ KNOWN BUGS - FUTURE improvemtns
   - Currency from WEI to options   (hash to bi fexied)
   - MultiHash is hardcoded for current IPFS for now
   - proofId and pledgeIds are sometimes same...
+  - make MultiHash for more flexibility (or maybe make upgradeable contract? or at least settable)
+  - refactor interfaces/controllers
+  - TDD was very slow, hard to get the quick feedback
+  - maybe controller should create these other contracts?
+  - game theoretics need to be improved
+  - front-running - what would happen
 
 
 
 Idea for expiring things - get a portion of the expired stuff?
+
+
+learnings
+- set block time to instant for tests :_(
+    

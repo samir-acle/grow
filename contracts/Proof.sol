@@ -33,6 +33,7 @@ contract Proof is IpfsStorage {
     // DATA STRUCTURES:
     // ============
     enum ProofState { Pending, Submitted, Accepted, Rejected, Expired }
+    // maybe add assigned, maybe optional?
     
     struct ProofStruct {
         MultiHash metadata;
@@ -52,7 +53,8 @@ contract Proof is IpfsStorage {
 
     uint public proofFee;
     mapping(bytes32 => ProofStruct) public proofIdToProof;
-    bytes32[] private proofs;
+    // TODO - if this is just for verifying that the proof is real, can use the pledeg....
+    bytes32[] private proofs;  
 
     // uint private pot;
 
@@ -77,7 +79,7 @@ contract Proof is IpfsStorage {
         proofIdToProof[proofId].pledgeId = _pledgeId;
         proofIdToProof[proofId].expiresAt = _expiresAt;
         proofIdToProof[proofId].index = proofs.push(proofId) - 1;
-        proofIdToProof[proofId].indexInPledge = _proofNumberInPledge;
+        proofIdToProof[proofId].indexInPledge = _proofNumberInPledge - 1;
         proofIdToProof[proofId].state = ProofState.Pending;
         proofIdToProof[proofId].collateral = _collateral;
 
@@ -97,18 +99,21 @@ contract Proof is IpfsStorage {
         bytes32 _proofId
     )
         internal
+        onlyProofState(_proofId, ProofState.Pending)
         returns(bool wasSubmitted)
     {
         require(isProof(_proofId), "Must be an existing proof");
-        require(hasProofState(_proofId, ProofState.Pending), "Proof must be pending");
+        // require(hasProofState(_proofId, ProofState.Pending), "Proof must be pending");
 
         // what to use instead of now?
         if (now <= proofIdToProof[_proofId].expiresAt) {
             proofIdToProof[_proofId].metadata = createIpfsMultiHash(_metadata);
             proofIdToProof[_proofId].state = ProofState.Submitted;
+            //TODO -  make this customizable?
             proofIdToProof[_proofId].expiresAt = now + 7 days;
             wasSubmitted = true;
 
+            // this should be another method, there could also be a self approve, self reject?
             // call staking contract to get size of stakers
             // get random number from oracle
             // lock stake for address at random number
@@ -148,6 +153,12 @@ contract Proof is IpfsStorage {
     function hasProofState(bytes32 _proofId, ProofState _requiredState) internal view returns (bool isValidState) {
         return proofIdToProof[_proofId].state == _requiredState;
     }
+
+    modifier onlyProofState(bytes32 _proofId, ProofState _requiredState) {
+        ProofState proofState = proofIdToProof[_proofId].state;
+        require(proofState == _requiredState);
+        _;
+    }
     // mapping(address => uint[]) private reviewerToPendingProofs;
     // mapping(address => uint[]) private reviewerToReviewedProofs;
 
@@ -167,7 +178,7 @@ contract Proof is IpfsStorage {
         returns(
             bytes32 metadata,
             bytes32 pledgeId,
-            uint index,
+            uint indexInPledge,
             uint expiresAt,
             uint collateral,
             address reviewer,
@@ -179,7 +190,7 @@ contract Proof is IpfsStorage {
         return (
             proofIdToProof[_proofId].metadata.hashDigest,
             proofIdToProof[_proofId].pledgeId,
-            proofIdToProof[_proofId].index,
+            proofIdToProof[_proofId].indexInPledge,
             proofIdToProof[_proofId].expiresAt,
             proofIdToProof[_proofId].collateral,
             proofIdToProof[_proofId].reviewer,
