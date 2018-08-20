@@ -1,80 +1,42 @@
 pragma solidity ^0.4.23;
-import "./Pledge.sol";
+import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 
 contract UserAccount {
+    // ============
+    // EVENTS:
+    // ============
+    event UserBalanceIncrease(address indexed ownerAddress, uint newProofFee);
 
-    // make this just user account to eth
-    // can have deposit and withdraw functions
-    // ERC721 will be in its contract
-    // stake will be in its contract
+    // ============
+    // DATA STRUCTURES:
+    // ============
+    using SafeMath for uint;
 
-    // struct with key to data
-    // array with key
+    // ============
+    // STATE VARIABLES:
+    // ============
+    mapping(address => uint) private balances;
 
-    struct User {
-        uint index;
-        uint stake;
-        uint lockedDeposits;
-        uint availableDeposits;
+    // ============
+    // MODIFIERS:
+    // ============
+
+
+    function getBalance() public returns (uint balance) {
+        return balances[msg.sender];
     }
 
-    mapping(address => User) internal addressToUserAccount;
-    address[] private users;
-
-    event LogNewUser   (address indexed userAddress, uint index);
-
-    modifier existingUserOrCreate() {
-        if(isUser(msg.sender) == false) {
-            insertUser(msg.sender);
-        }
-        _;
+    function withdraw() public {
+        uint amount = balances[msg.sender];
+        decreaseBalance(amount, msg.sender);
+        msg.sender.transfer(amount);
     }
 
-    function isUser(address _userAddress)
-        public 
-        view
-        returns(bool isIndeed) 
-    {
-        if(users.length == 0) return false;
-        return (users[addressToUserAccount[_userAddress].index] == _userAddress);
+    function increaseBalance(uint _amount, address _user) internal {
+        balances[_user] = balances[_user].add(_amount);
     }
 
-    function insertUser(
-        address userAddress
-    ) 
-        internal // private or internal?
-        returns(uint index)
-    {
-        require(!isUser(userAddress));
-        addressToUserAccount[userAddress].index = users.push(userAddress) - 1;
-        LogNewUser(
-            userAddress, 
-            addressToUserAccount[userAddress].index);
-        return users.length-1;
+    function decreaseBalance(uint _amount, address _user) internal {
+        balances[_user] = balances[_user].sub(_amount);
     }
-
-    function getUser(address userAddress)
-        public 
-        view
-        returns(uint index)
-    {
-        require(isUser(userAddress));
-        return addressToUserAccount[userAddress].index;
-    }
-
-    function getUserCount() 
-        public
-        view
-        returns(uint count)
-    {
-        return users.length;
-    }
-
-    function getUserAtIndex(uint index)
-        public
-        view
-        returns(address userAddress)
-    {
-        return users[index];
-    }    
 }

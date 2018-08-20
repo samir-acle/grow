@@ -22,7 +22,6 @@ contract Staking is Pausable, ERC721Holder {
     // ============
     // STATE VARIABLES:
     // ============
-
     mapping(uint => address) private tokenIdToOwner;
     mapping(uint => uint) private tokenIdToAvailableIndex;
     uint[] private availableTokens;
@@ -33,16 +32,15 @@ contract Staking is Pausable, ERC721Holder {
     // ============
     // MODIFIERS:
     // ============
-
     modifier onlyController {
         require(controller != address(0));
         require(msg.sender == controller);
         _;
     }
 
-    modifier onlyTokenOwner(uint _tokenId) {
-        require(tokenIdToOwner[_tokenId] != address(0));
-        require(tokenIdToOwner[_tokenId] == msg.sender);
+    modifier onlyTokenOwner(uint _tokenId, address _addressToVerify) {
+        require(_addressToVerify != address(0));
+        require(_addressToVerify == tokenIdToOwner[_tokenId]);
         _;
     }
 
@@ -62,6 +60,15 @@ contract Staking is Pausable, ERC721Holder {
             require(tokenIdToOwner[tokenId] != address(0));
             require(availableTokens[tokenIdToAvailableIndex[tokenId]] != tokenId);
         }
+        _;
+    }
+
+// TODO - test this new stake stuff
+// comment that if tokenid is 0 it wont work but this will be mitigated
+// by controlling and burning it
+
+    modifier onlyUnusedStakeId(bytes32 _stakeId) {
+        require(stakeIdToTokenId[_stakeId] == 0);
         _;
     }
 
@@ -98,7 +105,7 @@ contract Staking is Pausable, ERC721Holder {
     function withdraw(uint _tokenId) 
         public 
         whenNotPaused
-        onlyTokenOwner(_tokenId)
+        onlyTokenOwner(_tokenId, msg.sender)
         onlyAvailableTokens(_tokenId)
     {
         uint indexToDelete = tokenIdToAvailableIndex[_tokenId];
@@ -111,18 +118,20 @@ contract Staking is Pausable, ERC721Holder {
         emit WithdrawToken(tokenOwner, _tokenId);
     }
 
+    // could technically use this to stake for other things??
     /** @dev Stake token.
     * @param _stakeId An identifier for the stake for the controller
-    * @param _index The index of the token in the available tokens array.
+    * @param _tokenId The token to stake.
     */
-    function stake(bytes32 _stakeId, uint _index) public 
+    function stake(bytes32 _stakeId, uint _tokenId, address _staker) public 
         whenNotPaused 
-        onlyController 
+        onlyController
+        onlyTokenOwner(_tokenId, _staker)
+        onlyUnusedStakeId(_stakeId)
     {
-        uint tokenToStake = availableTokens[_index];
-        deleteAvailableTokenAtIndex(_index);
-        stakeIdToTokenId[_stakeId] = tokenToStake;
-        emit StakeToken(tokenIdToOwner[tokenToStake], tokenToStake, _stakeId);
+        deleteAvailableTokenAtIndex(tokenIdToAvailableIndex[_tokenId]);
+        stakeIdToTokenId[_stakeId] = _tokenId;
+        emit StakeToken(_staker, _tokenId, _stakeId);
     }
 
     /** @dev Release staked token.
@@ -159,6 +168,17 @@ contract Staking is Pausable, ERC721Holder {
         emit BurnStakedToken(_staker, 1, _stakeId);
     }
 
+    /** @dev Get address of staker.
+    * @param _stakeId An identifier for the stake.
+    * @return the address of the owner of the staked token.
+    */
+    function getStaker(bytes32 _stakeId) public 
+        onlyIfStaked(_stakeId)
+        returns(address staker)
+    {
+        return tokenIdToOwner[stakeIdToTokenId[_stakeId]];
+    }
+
     /** @dev Remove token from available array.
     * @param _index index of the token to remove
     */
@@ -188,4 +208,5 @@ contract Staking is Pausable, ERC721Holder {
 
 // TODO - check safe math everywhere
 // Pausable
-// maybe dont call proofId, just stakeId or something
+
+// TODO - make this reusable for any ERC721Token!!!!

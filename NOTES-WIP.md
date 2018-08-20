@@ -73,6 +73,7 @@ If reviewer makes decision and no dispute:
     Reviewer gets portion of pot
     Reviewer approves - both pledger and reviewer get their deposits back.
     Reviewer rejects - pledger's deposit split between pot
+        - amount based on any extra put in by reviewer
 
 If proof expires before reviewer submits decision
     Submission is approved, plegers deposit is returned
@@ -94,6 +95,12 @@ How to make sure pot remains filled?
 Slashing based on proof number?
 
 
+Was going to use oracalize or something similar to generate a random number,
+and pick at that index from stake array.  However, decided to go with a simpler 
+approach to have stakers see list of proofs and pick one to stake on
+
+Allow others to bet on completion of pledges.  Separate dApp.
+
 
 #####
 KNOWN BUGS - FUTURE improvemtns
@@ -107,13 +114,46 @@ KNOWN BUGS - FUTURE improvemtns
   - TDD was very slow, hard to get the quick feedback
   - maybe controller should create these other contracts?
   - game theoretics need to be improved
+    - did simplest
+    - future implement a random assigning of reviewer
+    - reward those who expire with something (at least gas cost coverage?)
   - front-running - what would happen
-
-
-
-Idea for expiring things - get a portion of the expired stuff?
-
+    - can you delay the approval/rejection, wait till expire, then expire it yourself?  Need to limit expirations to stakers with deposits?  Probably shouldnt give proofFee to person who marks as expired, unless that delays the something.  delays.... on staking?
+  - deal with tokenId 0.  Just send to myself and dont do anything to it?
+  - if proofFee is changed, what will happen to existing proofs
 
 learnings
 - set block time to instant for tests :_(
-    
+
+
+TODO
+- withdraw balance tests in solidity?
+- fallback function?
+- think about delays
+- fail safe that transfers collateral to balances and allows withdrawals...
+- when paused - self approve proofs?
+- limit amount of ether... how?
+- refactor balance addings into method in useraccount that will emit event?
+- events for expires
+- expiration a constant or configurable
+- Pledge state - set to expired/completed...
+- for changing of prooffee, need to make sure there are no active pledges
+
+tests to add
+    - submit proof only if previous proof complete?
+    - grow token tests maybe not done
+
+- when expiring, should the person who calls it get something? The proof fee?  but then what incentivizes someone to actually stake and review?  need to make it so they get some of the pot...
+- clean up
+    - move most requires to modifiers
+    - should modifiers all be on the public method rather than internal?
+    - validate inputs
+    - check integer overflow, underflows
+    - check for reentrancy
+    - make sure visibility set on all methods and are correct
+    - timestamp can be influenced - make sure use 'now' cannot be maniputlate to someones advanvtage
+    - check looping over undetermined length arrays (restrict length) bc can reach gas limits
+    -// TODO - figure out uints and placement in structs
+    - gas cost testing
+    - combine approve and reject into one method since most tests are same
+

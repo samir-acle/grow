@@ -1,9 +1,11 @@
 pragma solidity ^0.4.23;
 import "openzeppelin-solidity/contracts/math/SafeMath.sol";
+import "openzeppelin-solidity/contracts/lifecycle/Pausable.sol";
 import "./Proof.sol";
 import "./Pledge.sol";
 import "./UserAccount.sol";
 import "./GrowToken.sol";
+import "./Staking.sol";
 
 /** @title Grow. */
 contract Grow is Pausable, UserAccount, Proof, Pledge {
@@ -12,12 +14,16 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
     // EVENTS:
     // ============
     event ProofFeeUpdated(address indexed ownerAddress, uint newProofFee);
-    event GrowTokenUpdated(address indexed ownerAddress, address growTokenAddress);
+    event GrowTokenContractUpdated(address indexed ownerAddress, address growTokenAddress);
+    event StakingContractUpdated(address indexed ownerAddress, address stakingAddress);
+    event ReviewerVerified(address indexed ownerAddress, bytes32 proofId, address indexed reviewerAddress, bool wasApproved);
+    event ReviewerAssigned(address indexed ownerAddress, bytes32 proofId, address indexed reviewerAddress);
+    event PotIncrease(uint amount);
+    event ProofAutoApproved(address indexed ownerAddress, bytes32 proofId, uint amountRefunded);
 
     // ============
     // DATA STRUCTURES:
     // ============
-
     using SafeMath for uint;
 
     // ============
@@ -27,12 +33,28 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
     uint public proofFee;
     uint private pot;
     GrowToken private growToken;
+    Staking private staking;
 
     // ============
     // MODIFIERS:
     // ============
     // TODO - double check where these go
+    modifier stakingIsEnabled() {
+        require(staking != address(0));
+        require(!staking.paused());
+        _;
+    }
 
+    modifier stakingNotEnabled() {
+        require(staking != address(0));
+        require(staking.paused());
+        _;
+    }
+
+    modifier onlyReviewer(bytes32 _proofId) {
+        require(msg.sender == proofIdToProof[_proofId].reviewer);
+        _;
+    }
 
     //  TODO -  should this be percentage of collateral?  Probs because reviewer is risking more and putting more away and losing potential gains
     // 10 finney for now...
@@ -48,7 +70,15 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
         */
     function setGrowToken(address _address) public onlyOwner {
         growToken = GrowToken(_address);
-        emit GrowTokenUpdated(msg.sender, _address);
+        emit GrowTokenContractUpdated(msg.sender, _address);
+    }
+
+    /** @dev Sets the staking contract address. Only owner is authorized.
+        * @param _address The address of the staking contract to use.
+        */
+    function setStaking(address _address) public onlyOwner {
+        staking = Staking(_address);
+        emit StakingContractUpdated(msg.sender, _address);
     }
 
     /** @dev Sets the proofFee. Only owner is authorized.
@@ -70,6 +100,7 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
     )
         public
         payable
+        whenNotPaused
         returns(bytes32 pledgeId)
     {
         uint numOfProofs = _proofExpirations.length;
@@ -97,7 +128,6 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
       * @param _ipfsHash The hash where pictures for proof are stored in ipfs.
       * @param _pledgeId The pledgeId associated with the proof
       * @param _proofId The id of the proof that is being submitted
-      * @return proofIndex The last submitted index for the pledge..
       */
     function submitProof(
         bytes32 _ipfsHash,
@@ -105,33 +135,118 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
         bytes32 _proofId
     )
         public
-        returns(uint proofIndex)
+        whenNotPaused
+        onlyPledgeOwner(_pledgeId)
+        onlyIsProof(_proofId)
+        onlyIfPreviousProofComplete(_pledgeId)
+        onlyNextProofInOrder(_proofId, _pledgeId)
+        onlyPledgeState(_proofId, PledgeState.Active)
+        onlyProofState(_proofId, ProofState.Pending)
+        onlyNotExpired(_proofId)
     {
-        // TODO - rethink whether should be modifiers or requires..
-        require(isPledgeOwner(_pledgeId), "Must be owner of the pledge");
-        require(proofMatchesPledge(_proofId, _pledgeId), "Proof must be associated with the Pledge");
-        require(hasPledgeState(_pledgeId, PledgeState.Active));
-
         submitProofDetails(_ipfsHash, _proofId);
-        return ++pledgeIdToLastSubmittedProofIndex[_pledgeId];
     }
 
-// is it better to have one accept that will, based on state, require different things?
-// if submitted, requires to be reviewer
-// if expired, requires to be owner
-
-    function acceptExpiredProofReview(
-        bytes32 _proofId,
-        bytes32 _pledgeId
+    /** @dev Expire a proof.
+      * @param _proofId The id of the proof that is being expired
+      */
+    function expireProof(
+        bytes32 _proofId
     )
         public
-        returns(uint proofIndex)
+        whenNotPaused
+        onlyIsProof(_proofId)
+        onlyActiveProof(_proofId)
+        onlyExpired(_proofId)
     {
-        require(isPledgeOwner(_pledgeId), "Must be owner of the pledge");
-        require(proofMatchesPledge(_proofId, _pledgeId), "Proof must be associated with the Pledge");
-        require(hasProofState(_pledgeId, ProofState.Expired));
+        uint collateral = proofIdToProof[_proofId].collateral;
+        require(address(this).balance >= collateral);
+        clearCollateral(_proofId);
+        uint remainingCollateral = rewardSenderWithProofFee(collateral);
+
+        if (proofIdToProof[_proofId].state == ProofState.Pending) {
+            addToPot(remainingCollateral);
+            pledgeIdToNextProofIndex[proofIdToProof[_proofId].pledgeId]++;
+            updateProofState(_proofId, ProofState.Expired);
+        } else if (proofIdToProof[_proofId].state == ProofState.Submitted) {
+            autoApproveProof(_proofId, remainingCollateral);
+        } else if (proofIdToProof[_proofId].state == ProofState.Assigned) {
+            autoApproveProof(_proofId, remainingCollateral);
+            staking.burnStake(_proofId, proofIdToProof[_proofId].reviewer);
+        }
     }
 
+    /** @dev Approve or Reject the verification of a proof.
+      * @param _proofId The id of the proof
+      * @param _approved True if the proof is approved, false if rejected
+      */
+    function verifyProof(
+        bytes32 _proofId,
+        bool _approved
+    )
+        public
+        whenNotPaused
+        onlyProofState(_proofId, ProofState.Assigned)
+        onlyReviewer(_proofId)
+        onlyNotExpired(_proofId)
+    {
+        uint collateral = proofIdToProof[_proofId].collateral;
+        require(address(this).balance >= collateral);
+        clearCollateral(_proofId);
+        uint remainingCollateral = rewardSenderWithProofFee(collateral);
+
+        if (_approved) {
+            updateProofState(_proofId, ProofState.Accepted);
+            refundProofOwner(_proofId, remainingCollateral);
+        } else {
+            updateProofState(_proofId, ProofState.Rejected);
+            addToPot(remainingCollateral);
+        }
+
+        staking.releaseStake(_proofId, msg.sender);
+
+        emit ReviewerVerified(
+            pledgeIdToPledge[proofIdToProof[_proofId].pledgeId].owner, 
+            _proofId, 
+            msg.sender,
+            _approved
+        );
+    }
+
+    /** @dev Assign the reviewer for a proof.
+      * @param _proofId The id of the proof that is being assigned
+      * @param _tokenId The id of the token to stake
+      */
+    function assignReviewer(
+        bytes32 _pledgeId,
+        bytes32 _proofId,
+        uint _tokenId
+    )
+        public
+        whenNotPaused
+        stakingIsEnabled
+        onlyNotPledgeOwner(_pledgeId)
+        onlyIsProof(_proofId)
+        onlyProofState(_proofId, ProofState.Submitted)
+        onlyNotExpired(_proofId)
+    {
+        updateProofState(_proofId, ProofState.Assigned);
+        proofIdToProof[_proofId].reviewer = msg.sender;
+        proofIdToProof[_proofId].expiresAt = now + 7 days;
+        staking.stake(_proofId, _tokenId, msg.sender);
+
+        emit ReviewerAssigned(
+            pledgeIdToPledge[_pledgeId].owner, 
+            _proofId, 
+            msg.sender
+        );
+    }    
+
+    /** @dev Creates empty proofs with collateral and expiration.
+      * @param _pledgeId the pledgeId to set on the proofs
+      * @param _proofExpirations The list of expirations that will be mapped into Pledges
+      * @param _collateralPerProof The collateral for each proof
+      */
     function createEmptyProofs(
         bytes32 _pledgeId, 
         uint[] _proofExpirations, 
@@ -147,9 +262,14 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
         }
     }
 
+    function getPotAmount() public view onlyOwner returns(uint) {
+        return pot;
+    }
+
 // this could be in a library?
 // is there better way to do this so dont have to loop?
-    function inAscendingOrder(uint[] numberArray) private returns (bool isSorted) {
+// validate length is below certain size?
+    function inAscendingOrder(uint[] numberArray) private returns (bool isSorted) {        
         isSorted = true;
 
         for (uint i = 1; i < numberArray.length; i++) {
@@ -160,153 +280,42 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
         }
     }
 
-    function ableToCoverFees(uint _amount) private returns (bool isEnough) {
-        return _amount > proofFee;
-    }
-
-    function proofMatchesPledge(bytes32 _proofId, bytes32 _pledgeId) private returns (bool isValid) {
-        return proofIdToProof[_proofId].pledgeId == _pledgeId;
-    }
-
     function mintTokenIfFirstPledge(bytes32 _hashDigest) private returns (bool tokenWasMinted) {
         if (userAddressToNumberOfPledges[msg.sender] == 1) {
             growToken.mint(_hashDigest, msg.sender);
         }
     }
+
+    function ableToCoverFees(uint _amountPerProof) private returns (bool isEnough) {
+        return _amountPerProof >= proofFee;
+    }
+
+    function autoApproveProof(bytes32 _proofId, uint _amount) private {
+        updateProofState(_proofId, ProofState.Accepted);
+        refundProofOwner(_proofId, _amount);
+        emit ProofAutoApproved(
+            pledgeIdToPledge[proofIdToProof[_proofId].pledgeId].owner,
+            _proofId,
+            _amount
+        );
+    }
+
+    function refundProofOwner(bytes32 _proofId, uint _amount) private {
+        address pledgeOwner = pledgeIdToPledge[proofIdToProof[_proofId].pledgeId].owner;
+        increaseBalance(_amount, pledgeOwner);
+    }
+
+    function addToPot(uint _amount) private {
+        pot = pot.add(_amount);
+        emit PotIncrease(_amount);
+    }
+
+    function clearCollateral(bytes32 _proofId) private {
+        proofIdToProof[_proofId].collateral = 0;
+    }
+
+    function rewardSenderWithProofFee(uint collateral) private returns (uint) {
+        increaseBalance(proofFee, msg.sender);
+        return collateral.sub(proofFee);
+    }
 }
-    // ABOVE THIS IS TESTED AND SHOULD FOLLOW STYLE GUIDE!!
-
-//     function createToken(uint _proofFee)
-//        public
-//     {
-//         proofFee = _proofFee;
-//     }
-
-// //  should this be a modifier or private function or just require at beginning?
-// // or should it be calculared off chain
-//     function verifyAvailableFunds(address _userAddress, uint _amount)
-//         private
-//         view
-//         returns (bool hasFunds)
-//     {
-//         // TODO -safe math 
-//         return addressToUserAccount[_userAddress].availableDeposits >= _amount;
-//     }
-
-//     function verifyLockedFunds(address _userAddress, uint amount)
-//         private
-//         view
-//         returns (bool hasFunds)
-//     {
-//         return addressToUserAccount[_userAddress].lockedDeposits >= amount;
-//     }
-
-
-//     modifier verifyPot(uint amount) {
-//         // require(this.balance >= amount);
-//         _;
-//     }
-
-
-//     function submitProof(
-//         string _imageHash,
-//         bytes32 _pledgeId
-//     )
-//         public
-//         onlyPledgeOwner(_pledgeId)
-//         // verifyProofCount(_pledgeId)
-//         returns(uint proofIndex)
-//     {
-//         // probs make msg.sender in private function
-//         // require(verifyLockedFunds(msg.sender, pledgeIdToPledge[_pledgeId].collateral + proofFee) == true);
-//         uint newProofIndex = createProof(_imageHash, _pledgeId);
-
-//         // TODO - maybe not needed
-//         // pledgeIdToPledge[_pledgeId].hasPendingProof = true;
-
-//         // if has locked funds use them
-//         // if has available funds lock them
-//         // or else throw
-
-//         // lockDepositForProof(_pledgeId);
-//         transferIntoPot(proofFee, msg.sender);
-//         return newProofIndex;
-//     }
-
-//     function approveProof(
-//         bytes32 _proofId
-//     )
-//         public
-//         onlyReviewer(_proofId)
-//         onlyProofState(_proofId, ProofState.Pending)
-//         // returns()
-//     {
-//         // require(verifyAvailableFunds(msg.sender, pledgeIdToPledge[proofIdToProof[_proofId].pledgeId].collateral) == true);
-//         // TODO - move this into CRUD update functionality?
-//         lockDepositForProof(msg.sender, proofIdToProof[_proofId].pledgeId);
-//         proofIdToProof[_proofId].state = ProofState.Accepted;
-
-//     //     Reviewer gets portion of pot
-//     //     Reviewer approves - both pledger and reviewer get their deposits back.
-//     //     Reviewer rejects - pledger's deposit split between pot
-//     }
-
-//     function rejectProof(
-//         bytes32 _proofId
-//     )
-//         public
-//         onlyReviewer(_proofId)
-//         onlyProofState(_proofId, ProofState.Pending)
-//         // returns()
-//     {
-//         // require(verifyAvailableFunds(msg.sender, pledgeIdToPledge[proofIdToProof[_proofId].pledgeId].collateral) == true);
-//         // TODO - move this into CRUD update functionality?
-//         lockDepositForProof(msg.sender, proofIdToProof[_proofId].pledgeId);
-//         proofIdToProof[_proofId].state = ProofState.Rejected;
-//     //     Reviewer gets portion of pot
-//     //     Reviewer approves - both pledger and reviewer get their deposits back.
-//     //     Reviewer rejects - pledger's deposit split between pot
-//     }
-
-//     function lockDepositForProof(
-//         address _userAddress,
-//         bytes32 _pledgeId
-//     ) 
-//         private
-//     {
-//         uint proofDeposit = pledgeIdToPledge[_pledgeId].collateral;
-//         addressToUserAccount[_userAddress].availableDeposits = addressToUserAccount[_userAddress].availableDeposits - proofDeposit;
-//         addressToUserAccount[_userAddress].lockedDeposits = addressToUserAccount[_userAddress].lockedDeposits + proofDeposit;
-//     }
-
-//     // this all maybe should be different contract?  contract per pledge?  that way money is more secure?
-//     // probs not just contract balance, need to store pot
-//     function transferFromPot(
-//         uint _amount,
-//         address _userAddress
-//     )
-//         private
-//     {
-//         addressToUserAccount[_userAddress].availableDeposits = addressToUserAccount[_userAddress].availableDeposits + _amount;
-//     }
-
-//     function transferIntoPot(
-//         uint _amount,
-//         address _userAddress
-//     )
-//         private   
-//     {
-//         addressToUserAccount[_userAddress].lockedDeposits = addressToUserAccount[_userAddress].lockedDeposits - _amount;
-//     }
-
-//     // assign reviewer?
-//     // get random number
-//     // array of staked? in multiple times if have lots of completed?
-//     // modulus the length of stake array
-//     // thats the reviewer
-
-//     // could this be different contract???  separate crud from business logic?
-
-// }
-
-// // maybe bid on the ability to review?

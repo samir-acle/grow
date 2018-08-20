@@ -1,17 +1,19 @@
 const Grow = artifacts.require('Grow');
 const GrowToken = artifacts.require('GrowToken');
+const Staking = artifacts.require('Staking');
 import assertRevert from "openzeppelin-solidity/test/helpers/assertRevert";
 import Web3Utils from 'web3-utils';
 
 contract('Grow', accounts => {
-    let instance, growTokenInstance;
+    let instance, growTokenInstance, stakingInstance;
     const [firstAccount, secondAccount, thirdAccount] = accounts;
 
-    describe('proof Fee setting', () => {
+    beforeEach(async () => {
+        instance = await Grow.deployed();
+        growTokenInstance = await GrowToken.deployed();
+    });
 
-        beforeEach(async () => {
-            instance = await Grow.deployed();
-        });
+    describe('proof Fee setting', () => {
 
         /* 
         These tests check that the proofFee is set and can only be updated by
@@ -71,7 +73,7 @@ contract('Grow', accounts => {
             hashDigest = web3.fromAscii('fakeIpfsHash');
             pledgeId = Web3Utils.soliditySha3(secondAccount, 1);
             // Act
-            await instance.initPledge(proofExpirations, hashDigest, { from: secondAccount, value: web3.toWei(3, 'ether') });
+            await instance.initPledge(proofExpirations, hashDigest, { from: secondAccount, value: web3.toWei(30, 'finney') });
             expect(await instance.getPledgeAtIndex(0)).to.equal(pledgeId);
             createdPledge = await instance.getPledge.call(pledgeId);
         });
@@ -103,7 +105,7 @@ contract('Grow', accounts => {
                 expect(actualPledgeId).to.equal(pledgeId);
                 expect(index.toNumber()).to.equal(i);
                 expect(expiresAt.toNumber()).to.equal(proofExpirations[i]);
-                expect(collateral.toNumber()).to.equal(parseInt(web3.toWei(1, 'ether'), 10));
+                expect(collateral.toNumber()).to.equal(parseInt(web3.toWei(10, 'finney'), 10));
                 expect(status.toNumber()).to.equal(0);
                 // figure out how to test the hash is emty?
                 // check reviwer is 0x0
@@ -118,7 +120,7 @@ contract('Grow', accounts => {
 
         it('should not send another token to pledge owner if it was not the first pledge created', async () => {
             // Act
-            await instance.initPledge(proofExpirations, hashDigest, { from: secondAccount, value: web3.toWei(3, 'ether') });
+            await instance.initPledge(proofExpirations, hashDigest, { from: secondAccount, value: web3.toWei(10, 'finney') });
             // Assert
             const balance = await growTokenInstance.balanceOf.call(secondAccount);
             expect(balance.toNumber()).to.equal(1);
@@ -139,7 +141,7 @@ contract('Grow', accounts => {
             // Arrange
             const proofExpirations = [153, 154, 151];
             // Act and Assert
-            await assertRevert(instance.initPledge(proofExpirations, hashDigest, { from: secondAccount, value: web3.toWei(1, 'ether') }));
+            await assertRevert(instance.initPledge(proofExpirations, hashDigest, { from: secondAccount, value: web3.toWei(10, 'finney') }));
         });
 
         it('will fail if collateral per proof is not greater than the pledge fee', async () => {
@@ -152,6 +154,14 @@ contract('Grow', accounts => {
     });
 
     describe('submit proof', async () => {
+        const now = Date.now();
+        const hoursInFuture = now + 10000000;
+        const daysInFuture = now + 1000000000;
+        const daysInPast = now - 1000000000;
+
+        before(async () => {
+            instance = await Grow.deployed();
+        })
 
         it('should fail if not pledge owner', async () => {
             // Arrange
@@ -166,26 +176,24 @@ contract('Grow', accounts => {
             const proofExpirations = [1533779];
             const { proofId } = await getPledgeAndProofId(proofExpirations);
 
-            await instance.initPledge(proofExpirations, web3.fromAscii('ipfshash'), { from: secondAccount, value: web3.toWei(1, 'ether') });
+            await instance.initPledge(proofExpirations, web3.fromAscii('ipfshash'), { from: secondAccount, value: web3.toWei(10, 'finney') });
             const pledgeId2 = Web3Utils.soliditySha3(secondAccount, 2);
             // Act and Assert
             await assertRevert(instance.submitProof(web3.fromAscii('growth'), pledgeId2, proofId, { from: thirdAccount }));
         });
 
-        it('should fail if is already completed', async () => {
+        it('should fail if is already submitted', async () => {
             // Arrange
-            const now = Date.now();
-            const proofExpirations = [now + 10000, now + 100000];
+            const proofExpirations = [hoursInFuture, daysInFuture].map(convertMsToSec);
             const { pledgeId, proofId } = await getPledgeAndProofId(proofExpirations);
 
             await instance.submitProof(web3.fromAscii('growth'), pledgeId, proofId, { from: secondAccount });
             // Act and Assert
-            await assertRevert(instance.submitProof(web3.fromAscii('growth'), pledgeId, proofId, { from: thirdAccount }));
+            await assertRevert(instance.submitProof(web3.fromAscii('growth'), pledgeId, proofId, { from: secondAccount }));
         });
 
         it('should update proof status if before expiration', async () => {
-            const now = Date.now();
-            const proofExpirations = [(now + 10000) / 1000];
+            const proofExpirations = [hoursInFuture].map(convertMsToSec);
             const hashDigest = web3.fromAscii('images for proof');
             // Arrange
             const { pledgeId, proofId } = await getPledgeAndProofId(proofExpirations);
@@ -196,30 +204,133 @@ contract('Grow', accounts => {
             expect(status.toNumber()).to.equal(1);
             // expect(metadata).to.equal(5);
             // expect(expiresAt.toNumber()).to.equal();
-
         });
 
-        it('should expire proof if after expiration', async () => {
-            const now = Date.now();
-            const proofExpirations = [now + 10000, now + 100000];
+        it('should revert if after expiration', async () => {
+            const proofExpirations = [daysInPast].map(convertMsToSec);
             const hashDigest = web3.fromAscii('images for proof');
             // Arrange
             const { pledgeId, proofId } = await getPledgeAndProofId(proofExpirations);
-            // Act
+            // Act and Assert
+            await assertRevert(instance.submitProof(web3.fromAscii('growth'), pledgeId, proofId, { from: secondAccount }));
+        });
+
+        it('should track the last submitted index', async () => {
+            const proofExpirations = [hoursInFuture, daysInFuture].map(convertMsToSec);
+            const { pledgeId, proofId } = await getPledgeAndProofId(proofExpirations);
+            
+            let lastSubmittedIndex = await instance.pledgeIdToNextProofIndex.call(pledgeId);
+            expect(lastSubmittedIndex.toNumber()).to.equal(0);
+
             await instance.submitProof(web3.fromAscii('growth'), pledgeId, proofId, { from: secondAccount });
+
+            lastSubmittedIndex = await instance.pledgeIdToNextProofIndex.call(pledgeId);
+            expect(lastSubmittedIndex.toNumber()).to.equal(1);
+
+            const proof2Id = Web3Utils.soliditySha3(pledgeId, 2);
+            await instance.submitProof(web3.fromAscii('growth'), pledgeId, proof2Id, { from: secondAccount });
+            
+            lastSubmittedIndex = await instance.pledgeIdToNextProofIndex.call(pledgeId);
+            expect(lastSubmittedIndex.toNumber()).to.equal(2);
+        });
+
+        it('should revert if the proof is not the next proof in line', async () => {
+            const proofExpirations = [hoursInFuture, daysInFuture].map(convertMsToSec);
+            const hashDigest = web3.fromAscii('images for proof');
+            // Arrange
+            const { pledgeId } = await getPledgeAndProofId(proofExpirations);
+            const wrongProofId = Web3Utils.soliditySha3(pledgeId, 2);
+            // Act
+            await assertRevert(instance.submitProof(web3.fromAscii('growth'), pledgeId, wrongProofId, { from: secondAccount }));
+        });
+    });
+
+    describe('expire proof', async () => {
+        const now = Date.now();
+        const hoursInFuture = now + 10000000;
+        const daysInFuture = now + 1000000000;
+        const daysInPast = now - 1000000000;
+
+        before(async () => {
+            instance = await Grow.deployed();
+        })
+
+        it('should fail if is already submitted', async () => {
+            // Arrange
+            const proofExpirations = [hoursInFuture].map(convertMsToSec);
+            const { pledgeId, proofId } = await getPledgeAndProofId(proofExpirations);
+
+            await instance.submitProof(web3.fromAscii('growth'), pledgeId, proofId, { from: secondAccount });
+            // TODO - increase time here for a better test
+            // Act and Assert
+            await assertRevert(instance.expireProof(proofId, { from: secondAccount }));
+        });
+
+        it('should update proof status if after expiration', async () => {
+            const proofExpirations = [daysInPast].map(convertMsToSec);
+            // Arrange
+            const { proofId } = await getPledgeAndProofId(proofExpirations);
+            // Act
+            await instance.expireProof(proofId);
             // Assert
             const [, , , , , , status] = await instance.getProof.call(proofId);
             expect(status.toNumber()).to.equal(5);
         });
-    })
 
-    const getPledgeAndProofId = async (proofExpirations) => {
-        await instance.initPledge(proofExpirations, web3.fromAscii('ipfshash'), { from: secondAccount, value: web3.toWei(1, 'ether') });
-        const pledgeId = Web3Utils.soliditySha3(secondAccount, 1);
+        it('should revert if not expired', async () => {
+            const proofExpirations = [hoursInFuture].map(convertMsToSec);
+            // Arrange
+            const { proofId } = await getPledgeAndProofId(proofExpirations);
+            // Act and Assert
+            await assertRevert(instance.expireProof(proofId));
+        });
+
+        it('should track the last submitted index', async () => {
+            const proofExpirations = [daysInPast, daysInPast].map(convertMsToSec);
+            const { proofId, pledgeId } = await getPledgeAndProofId(proofExpirations);
+            
+            let lastSubmittedIndex = await instance.pledgeIdToNextProofIndex.call(pledgeId);
+            expect(lastSubmittedIndex.toNumber()).to.equal(0);
+
+            await instance.expireProof(proofId, { from: secondAccount });
+
+            lastSubmittedIndex = await instance.pledgeIdToNextProofIndex.call(pledgeId);
+            expect(lastSubmittedIndex.toNumber()).to.equal(1);
+
+            const proof2Id = Web3Utils.soliditySha3(pledgeId, 2);
+            await instance.expireProof(proof2Id, { from: secondAccount });
+            
+            lastSubmittedIndex = await instance.pledgeIdToNextProofIndex.call(pledgeId);
+            expect(lastSubmittedIndex.toNumber()).to.equal(2);
+        });
+
+        it('should revert if the proof is not the next proof in line', async () => {
+            const proofExpirations = [daysInPast, daysInPast].map(convertMsToSec);
+            // Arrange
+            const { pledgeId } = await getPledgeAndProofId(proofExpirations);
+            const wrongProofId = Web3Utils.soliditySha3(pledgeId, 2);
+            // Act
+            await assertRevert(instance.expireProof(wrongProofId, { from: secondAccount }));
+        });
+    })    
+
+    const getPledgeAndProofId = async (proofExpirations, options = {}) => {
+        let pledgeOwner = options.pledgeOwner || secondAccount;
+        let totalCollateral = options.totalCollateral || 10;
+
+        await instance.initPledge(proofExpirations, web3.fromAscii('ipfshash'), { from: pledgeOwner, value: web3.toWei(totalCollateral, 'finney') });
+
+        const numOfPledges = await instance.userAddressToNumberOfPledges(pledgeOwner);
+        const pledgeId = Web3Utils.soliditySha3(pledgeOwner, numOfPledges.toNumber());
         const proofId = Web3Utils.soliditySha3(pledgeId, 1);
         return {
             pledgeId,
             proofId,
         }
     };
+
+    const convertMsToSec = (ms) => Math.floor(ms / 1000);
+ 
 });
+
+// not resetting state between tets...

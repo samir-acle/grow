@@ -1,5 +1,6 @@
 pragma solidity ^0.4.23;
 import "./IpfsStorage.sol";
+import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 
 // constants for expires etc
 
@@ -18,21 +19,25 @@ contract Proof is IpfsStorage {
 
     event ProofSubmitted(
         address indexed userAddress,
-        bytes32 indexed pledgeId,
+        bytes32 pledgeId,
         bytes32 proofId,
-        bytes32 metadata
+        bytes32 metadata,
+        uint indexInPledge
     );
 
-    event ProofExpired(
+    event ProofStateUpdated(
         address indexed userAddress,
         bytes32 indexed pledgeId,
-        bytes32 proofId
+        bytes32 proofId,
+        uint indexInPledge,
+        ProofState indexed updatedState
     );
 
     // ============
     // DATA STRUCTURES:
     // ============
-    enum ProofState { Pending, Submitted, Accepted, Rejected, Expired }
+    using SafeMath for uint;
+    enum ProofState { Pending, Submitted, Assigned, Accepted, Rejected, Expired }
     // maybe add assigned, maybe optional?
     
     struct ProofStruct {
@@ -44,25 +49,64 @@ contract Proof is IpfsStorage {
         uint collateral;
         address reviewer;
         ProofState state;
-
     }
 
     // ============
     // STATE VARIABLES:
     // ============
-
-    uint public proofFee;
     mapping(bytes32 => ProofStruct) public proofIdToProof;
-    // TODO - if this is just for verifying that the proof is real, can use the pledeg....
+    // TODO - if this is just for verifying that the proof is real, can use the pledegindex....
     bytes32[] private proofs;  
-
-    // uint private pot;
+    mapping(bytes32 => uint) public pledgeIdToNextProofIndex;
 
     // ============
     // MODIFIERS:
     // ============
-    // TODO - double check where these go
+    modifier onlyNextProofInOrder(bytes32 _proofId, bytes32 _pledgeId) {
+        require(proofIdToProof[_proofId].indexInPledge == pledgeIdToNextProofIndex[_pledgeId]);
+        _;
+    }
 
+    modifier onlyNotExpired(bytes32 _proofId) {
+        require(proofIdToProof[_proofId].expiresAt >= now);
+        _;
+    }
+
+    modifier onlyExpired(bytes32 _proofId) {
+        require(proofIdToProof[_proofId].expiresAt < now);
+        _;
+    }
+
+    modifier onlyIsProof(bytes32 _proofId) {
+        require(isProof(_proofId), "Must be an existing proof");
+        _;
+    }
+
+    modifier onlyProofState(bytes32 _proofId, ProofState _requiredState) {
+        require(proofIdToProof[_proofId].state == _requiredState);
+        _;
+    }
+
+    modifier onlyReviewer(bytes32 _proofId) {
+        require(msg.sender == proofIdToProof[_proofId].reviewer);
+        _;
+    }
+
+    modifier onlyActiveProof(bytes32 _proofId) {
+        require(proofIdToProof[_proofId].state == ProofState.Pending ||
+            proofIdToProof[_proofId].state == ProofState.Submitted ||
+            proofIdToProof[_proofId].state == ProofState.Assigned
+        );
+        _;
+    }
+
+    /** @dev Creates proof without a metadata hash.
+      * @param _pledgeId The id or the pledge the proof is for
+      * @param _expiresAt The time of proof expiration
+      * @param _collateral The amount in wei that will be forfeit if proof is not completed
+      * @param _proofNumberInPledge The index of the pledge in the proof
+      * @return proofId The id of the newly created proof
+      */
     function createEmptyProof(
         bytes32 _pledgeId, 
         uint _expiresAt,
@@ -94,82 +138,50 @@ contract Proof is IpfsStorage {
         return proofId;
     }
 
+    /** @dev Submit the metadata for the proof
+      * @param _metadata The hash digest of the ipfsHash of the proof photos
+      * @param _proofId The id of the proof
+      */
     function submitProofDetails(
         bytes32 _metadata,
         bytes32 _proofId
     )
         internal
-        onlyProofState(_proofId, ProofState.Pending)
-        returns(bool wasSubmitted)
     {
-        require(isProof(_proofId), "Must be an existing proof");
-        // require(hasProofState(_proofId, ProofState.Pending), "Proof must be pending");
+        bytes32 pledgeId = proofIdToProof[_proofId].pledgeId;
 
-        // what to use instead of now?
-        if (now <= proofIdToProof[_proofId].expiresAt) {
-            proofIdToProof[_proofId].metadata = createIpfsMultiHash(_metadata);
-            proofIdToProof[_proofId].state = ProofState.Submitted;
-            //TODO -  make this customizable?
-            proofIdToProof[_proofId].expiresAt = now + 7 days;
-            wasSubmitted = true;
+        proofIdToProof[_proofId].metadata = createIpfsMultiHash(_metadata);
+        updateProofState(_proofId, ProofState.Submitted);
+        proofIdToProof[_proofId].expiresAt = now + 7 days;
 
-            // this should be another method, there could also be a self approve, self reject?
-            // call staking contract to get size of stakers
-            // get random number from oracle
-            // lock stake for address at random number
-            // assign review to proof
-            // set new expiration date
+        pledgeIdToNextProofIndex[pledgeId]++;
 
-            emit ProofSubmitted(
-                msg.sender, 
+        emit ProofSubmitted(
+            msg.sender, 
+            pledgeId,
+            _proofId,
+            proofIdToProof[_proofId].metadata.hashDigest,
+            proofIdToProof[_proofId].indexInPledge
+        );
+    }
+
+    /** @dev Update the ProofState for a proof
+      * @param _proofId The id of the proof
+      * @param _newState The new ProofState for the proof
+      */
+    function updateProofState(bytes32 _proofId, ProofState _newState) internal {
+        proofIdToProof[_proofId].state = _newState;
+
+        emit ProofStateUpdated(
+                 msg.sender, 
                 proofIdToProof[_proofId].pledgeId,
                 _proofId,
-                proofIdToProof[_proofId].metadata.hashDigest
-            );
-        } else {
-            proofIdToProof[_proofId].state = ProofState.Expired;
-            wasSubmitted = false;
-
-            emit ProofExpired(
-                msg.sender, 
-                proofIdToProof[_proofId].pledgeId,
-                _proofId
-            );
-        }
+                proofIdToProof[_proofId].indexInPledge,
+                _newState          
+        );
     }
 
-
-    function isProof(
-        bytes32 _proofId
-    ) 
-        private
-        view
-        returns(bool isIndeed) 
-    {
-        if(proofs.length == 0) return false;
-        return (proofs[proofIdToProof[_proofId].index] == _proofId);
-    }
-
-    function hasProofState(bytes32 _proofId, ProofState _requiredState) internal view returns (bool isValidState) {
-        return proofIdToProof[_proofId].state == _requiredState;
-    }
-
-    modifier onlyProofState(bytes32 _proofId, ProofState _requiredState) {
-        ProofState proofState = proofIdToProof[_proofId].state;
-        require(proofState == _requiredState);
-        _;
-    }
-    // mapping(address => uint[]) private reviewerToPendingProofs;
-    // mapping(address => uint[]) private reviewerToReviewedProofs;
-
-    //  TODO - check address has user account before assigning as reviwer
-    // maybe reviewer is in array instead?  
-    // TODO - verify checking that not 0x0 for all address checks?
-    modifier onlyReviewer(bytes32 _proofId) {
-        require(msg.sender == proofIdToProof[_proofId].reviewer);
-        _;
-    }
-
+// make sure need these
     function getProof(
         bytes32 _proofId
     )
@@ -198,28 +210,32 @@ contract Proof is IpfsStorage {
         );
     }
 
-    // function getProofState(bytes32 _proofId) public view returns(ProofState state) {
-    //     require(isProof(_proofId));
-    //     return (
-    //         proofIdToProof[_proofId].state
-    //     );
-    // }
+    function getPledgeIdToLastSubmittedProofIndex(bytes32 _pledgeId) public returns(uint index) {
+        return pledgeIdToNextProofIndex[_pledgeId];
+    }
+// 
 
-    // function getTotalProofCount()
-    //     public
-    //     view
-    //     returns(uint count)
-    // {
-    //     return proofs.length;
-    // }
+    /** @dev Verify that the proofId matches an existing proof
+      * @param _proofId The id of the proof
+      * @return isIndeed bool for if it is valid
+      */
+    function isProof(
+        bytes32 _proofId
+    ) 
+        private
+        view
+        returns(bool isIndeed) 
+    {
+        if(proofs.length == 0) return false;
+        return (proofs[proofIdToProof[_proofId].index] == _proofId);
+    }
 
-    // function getProofAtIndex(
-    //     uint _proofIndex
-    // )
-    //     public
-    //     view
-    //     returns(bytes32 proofId)
-    // {
-    //     return proofs[_proofIndex];
-    // }
+    /** @dev Verify the state of a proof
+      * @param _proofId The id of the proof
+      * @param _requiredState The state the proof needs to be in to be valid
+      * @return isValidState bool for if is in the correct state
+      */
+    function hasProofState(bytes32 _proofId, ProofState _requiredState) internal view returns (bool isValidState) {
+        return proofIdToProof[_proofId].state == _requiredState;
+    }
 }

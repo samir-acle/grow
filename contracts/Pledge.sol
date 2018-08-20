@@ -4,101 +4,87 @@ import "./IpfsStorage.sol";
 import "./Proof.sol";
 
 contract Pledge is Pausable, IpfsStorage, Proof {
+    // ============
+    // EVENTS:
+    // ============
+    event NewPledge(address indexed userAddress, uint index, bytes32 ipfsHash);
 
-// TODO - figure out uints and placement in structs
-// not done yet
+    // ============
+    // DATA STRUCTURES:
+    // ============
+    using SafeMath for uint;
     enum PledgeState { Active, Completed, Expired }
 
-    // enum ProofState { Pending, Accepted, Rejected }
-    
-// TODO - compare gas costs of using Multihash vs saving bytes32 without begining
-
-    // struct ProofStruct {
-    //     MultiHash ipfsHash;
-    //     bool approved;
-    //     uint index;
-    //     uint submitTime;
-    //     bytes32 pledgeId;
-    //     ProofState state;
-    //     address reviewer;
-    // }
-
     struct PledgeStruct {
-        // uint startTime;  this doesnt really matter?
-        // uint expiresAt;  this is last proof expiration time
         MultiHash metadata;
         uint index;
-        // check if this should start at 0 or 1
         address owner;
         PledgeState state;
         bytes32[] proofs;
     }
-
-    // should proofs be more intertwined with pledges?
-    // create proof structs when create pledge?  or is that extra gas cost that is uneeded?  - in the case pledge is canceld
-    // or maybe just ids
-
-    // separate contract for the whole approving thing
-
-    // TODO - mapping to mapping for pledges you need to proof?
-
+    // ============
+    // STATE VARIABLES:
+    // ============
     mapping(bytes32 => PledgeStruct) public pledgeIdToPledge;
     bytes32[] private pledges;
-
     mapping(address => uint) public userAddressToNumberOfPledges;
 
-    // toDO - might not need this
-    mapping(bytes32 => uint) internal pledgeIdToLastSubmittedProofIndex;
+    // ============
+    // MODIFIERS:
+    // ============
+    modifier onlyIsPledge(bytes32 _pledgeId) {
+        require(isPledge(_pledgeId), "Pledge must exist");
+        _;
+    }
 
-    event NewPledge(address indexed userAddress, uint index, bytes32 ipfsHash);
-    // event PldegeStateChange(address indexed userAddress, )
+    modifier onlyPledgeOwner(bytes32 _pledgeId) {
+        require(msg.sender == pledgeIdToPledge[_pledgeId].owner);
+        _;
+    }
 
-    // modifier onlyPledgeOwner(bytes32 _pledgeId) 
-    // {
-    //     require(
-    //         msg.sender == pledgeIdToPledge[_pledgeId].owner,
-    //         "Sender not authorized."
-    //     );
-    //     _;
-    // }
+    modifier onlyNotPledgeOwner(bytes32 _pledgeId) {
+        require(msg.sender != pledgeIdToPledge[_pledgeId].owner);
+        _;
+    }
+
+    modifier onlyAssociatedProofsAndPledge(bytes32 _proofId, bytes32 _pledgeId) {
+        require(proofMatchesPledge(_proofId, _pledgeId), "Proof must be associated with the Pledge");
+        _;
+    }
+
+    modifier onlyPledgeState(bytes32 _pledgeId, PledgeState state) {
+        require(hasPledgeState(_pledgeId, state));
+        _;
+    }
+
+    modifier onlyIfPreviousProofComplete(bytes32 _pledgeId) {
+        if (pledgeIdToNextProofIndex[_pledgeId] > 0) {
+            uint lastProofIndex = pledgeIdToNextProofIndex[_pledgeId].sub(1);
+            bytes32 lastProofId = pledgeIdToPledge[_pledgeId].proofs[lastProofIndex];
+            ProofState lastProofState = proofIdToProof[lastProofId].state;
+            require(lastProofState == ProofState.Accepted ||
+                lastProofState == ProofState.Rejected ||
+                lastProofState == ProofState.Expired);
+        }
+        _;
+    }
 
     function isPledgeOwner(bytes32 _pledgeId) internal returns (bool isOwner) {
         return msg.sender == pledgeIdToPledge[_pledgeId].owner;
     }
 
-// maybe have different modifiers for each condition?
-// if using parameters is it better as function?
-    modifier onlyValidPledges(uint _expiresAt, uint _numberOfProofs)
-    {
-        _;
+    function proofMatchesPledge(bytes32 _proofId, bytes32 _pledgeId) private returns (bool isValid) {
+        return proofIdToProof[_proofId].pledgeId == _pledgeId;
     }
-
-    modifier checkExpiry(bytes32 _pledgeId) {
-        // don't expire if have pending proofs
-
-        // if(pledgeIdToPledge[_pledgeId].expiresAt <= now) {
-        //     pledgeIdToPledge[_pledgeId].state = PledgeState.Expired;
-        // }
-        _;
-    }
-
-    // modifier hasState(PledgeState _requiredState, bytes32 _pledgeId) {
-    //     require(
-    //         pledgeIdToPledge[_pledgeId].state == _requiredState,
-    //         "Pledge is not in the correct state"
-    //     );
-    //     _;
-    // }
 
     function hasPledgeState(bytes32 _pledgeId, PledgeState _requiredState) internal returns (bool isValidState) {
         return pledgeIdToPledge[_pledgeId].state == _requiredState;
     }
 
-
-// came back with 3   but 2 are empty...
     function getPledge(bytes32 _pledgeId)
         public 
         view
+        onlyIsPledge(_pledgeId)
         returns(
             bytes32 metadataHash,
             uint index,
@@ -108,8 +94,6 @@ contract Pledge is Pausable, IpfsStorage, Proof {
             uint numOfProofs
         )
     {
-        require(isPledge(_pledgeId), "Pledge must exist");
-
         uint size = pledgeIdToPledge[_pledgeId].proofs.length;
 
         return (
@@ -140,6 +124,7 @@ contract Pledge is Pausable, IpfsStorage, Proof {
         pledgeIdToPledge[pledgeId].proofs = new bytes32[](_numOfProofs);
 
         userAddressToNumberOfPledges[msg.sender]++;
+        // can inline this above
 
         emit NewPledge(msg.sender, pledgeIdToPledge[pledgeId].index, _ipfsHash);
         return pledgeId;

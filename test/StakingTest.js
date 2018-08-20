@@ -6,24 +6,24 @@ const GrowToken = artifacts.require('GrowToken');
 
 contract('Staking', accounts => {
     let instance, growTokenInstance;
-    const [firstAccount, secondAccount, controllerAccount] = accounts;
+    const [deployerAccount, userAccount, controllerAccount] = accounts;
 
     beforeEach(async () => {
         growTokenInstance = await GrowToken.new();
-        await growTokenInstance.setMinter(firstAccount);
-        await growTokenInstance.mint(web3.fromAscii('testing'), secondAccount);
-        await growTokenInstance.mint(web3.fromAscii('testing'), secondAccount);
-        await growTokenInstance.mint(web3.fromAscii('testing'), secondAccount);
-        await growTokenInstance.mint(web3.fromAscii('testing'), secondAccount);
+        await growTokenInstance.setMinter(deployerAccount);
+        await growTokenInstance.mint(web3.fromAscii('testing'), userAccount);
+        await growTokenInstance.mint(web3.fromAscii('testing'), userAccount);
+        await growTokenInstance.mint(web3.fromAscii('testing'), userAccount);
+        await growTokenInstance.mint(web3.fromAscii('testing'), userAccount);
         
         instance = await Staking.new(growTokenInstance.address);
 
         await growTokenInstance.setBurner(instance.address);
         await instance.setController(controllerAccount);
-        await growTokenInstance.approve(instance.address, 0, { from: secondAccount });
-        await growTokenInstance.approve(instance.address, 1, { from: secondAccount });
-        await growTokenInstance.approve(instance.address, 2, { from: secondAccount });
-        await growTokenInstance.approve(instance.address, 3, { from: secondAccount });
+        await growTokenInstance.approve(instance.address, 0, { from: userAccount });
+        await growTokenInstance.approve(instance.address, 1, { from: userAccount });
+        await growTokenInstance.approve(instance.address, 2, { from: userAccount });
+        await growTokenInstance.approve(instance.address, 3, { from: userAccount });
     })
 
     describe('deposits and withdrawals', () => {
@@ -31,7 +31,7 @@ contract('Staking', accounts => {
             const initialStakeCount = await instance.getAvailableStakeCount.call();
             expect(initialStakeCount.toNumber()).to.equal(0);
 
-            await instance.deposit(1, { from: secondAccount });
+            await instance.deposit(1, { from: userAccount });
 
             const availableStakeCount = await instance.getAvailableStakeCount.call();
             expect(availableStakeCount.toNumber()).to.equal(1);
@@ -40,43 +40,39 @@ contract('Staking', accounts => {
         it('should allow withdrawals of a token', async () => {
             const tokenToWithdraw = 1;
 
-            await instance.deposit(0, { from: secondAccount });
-            await instance.deposit(1, { from: secondAccount });
-            await instance.deposit(2, { from: secondAccount });
+            await instance.deposit(0, { from: userAccount });
+            await instance.deposit(1, { from: userAccount });
+            await instance.deposit(2, { from: userAccount });
 
             const initialStakeCount = await instance.getAvailableStakeCount.call();
             expect(initialStakeCount.toNumber()).to.equal(3);
 
-            await instance.withdraw(tokenToWithdraw, { from: secondAccount });
+            await instance.withdraw(tokenToWithdraw, { from: userAccount });
 
             const availableStakeCount = await instance.getAvailableStakeCount.call();
             expect(availableStakeCount.toNumber()).to.equal(2);
-            // these are private methods below.. how to test?
-            // expect(tokenIdToOwner[tokenToWithdraw]).to.equal(address(0));
-            // expect(availableTokens[tokenIdToAvailableIndex[tokenToWithdraw]]).not.to.equal(tokenToWithdraw);
         });
 
         it('should not allow withdrawal if not token owner', async () => {
-            await instance.deposit(0, { from: secondAccount });
-            await assertRevert(instance.withdraw(0, { from: firstAccount }));
+            await instance.deposit(0, { from: userAccount });
+            await assertRevert(instance.withdraw(0, { from: deployerAccount }));
         });
     })
 
 
     describe('stake', () => {
-        let availableTokens, stakeId = web3.fromAscii('stakeid');
+        let availableTokens;
+        let tokenId = 2; 
+        let stakeId = web3.fromAscii('stakeid');
 
-        it('should allow tokens to be staked',async () => {
-            const tokenId = 2;
-            const availableIndex = 1;
-    
-            await instance.deposit(0, { from: secondAccount });
-            await instance.deposit(tokenId, { from: secondAccount });
-            await instance.deposit(1, { from: secondAccount });
+        it('should allow tokens to be staked by controller',async () => {
+            await instance.deposit(0, { from: userAccount });
+            await instance.deposit(tokenId, { from: userAccount });
+            await instance.deposit(1, { from: userAccount });
             availableTokens = await instance.getAvailableStakeCount.call();
             expect(availableTokens.toNumber()).to.equal(3);
             
-            await instance.stake(stakeId, availableIndex, { from: controllerAccount });
+            await instance.stake(stakeId, tokenId, userAccount, { from: controllerAccount });
             
             availableTokens = await instance.getAvailableStakeCount.call();
             expect(await availableTokens.toNumber()).to.equal(2);
@@ -84,19 +80,24 @@ contract('Staking', accounts => {
             expect(stakedTokenId.toNumber()).to.equal(tokenId);
         });
     
-        it('should not allow non-stake controller', async () => {
-            await instance.deposit(0, { from: secondAccount });
-            await assertRevert(instance.stake(stakeId, 0, { from: secondAccount }));
+        it('should not allow staking of a token by a different owner', async () => {
+            await instance.deposit(tokenId, { from: userAccount });
+            await assertRevert(instance.stake(stakeId, tokenId, deployerAccount, { from: controllerAccount }));
+        });
+
+        it('should not allow non-controller to stake', async () => {
+            await instance.deposit(tokenId, { from: userAccount });
+            await assertRevert(instance.stake(stakeId, tokenId, userAccount, { from: userAccount }));
         });
     
         it('should not allow a non-available token to be staked', async () => {
-            await assertRevert(instance.stake(stakeId, 4, { from: secondAccount }));
+            await assertRevert(instance.stake(stakeId, 4, userAccount, { from: controllerAccount }));
         });
     
         it('not allow withdrawal if token is staked', async () => {
-            await instance.deposit(0, { from: secondAccount });
-            await instance.stake(stakeId, 0, { from: controllerAccount });
-            await assertRevert(instance.withdraw(0));
+            await instance.deposit(tokenId, { from: userAccount });
+            await instance.stake(stakeId, tokenId, userAccount, { from: controllerAccount });
+            await assertRevert(instance.withdraw(tokenId, { from: userAccount }));
 
         });
     });
@@ -110,15 +111,15 @@ contract('Staking', accounts => {
         })
 
         it('should allow stake to be released', async () => {
-            await instance.deposit(tokenId, { from: secondAccount });
+            await instance.deposit(tokenId, { from: userAccount });
             availableTokens = await instance.getAvailableStakeCount.call();
             expect(availableTokens.toNumber()).to.equal(1);
 
-            await instance.stake(stakeId, 0, { from: controllerAccount });
+            await instance.stake(stakeId, tokenId, userAccount, { from: controllerAccount });
             availableTokens = await instance.getAvailableStakeCount.call();
             expect(availableTokens.toNumber()).to.equal(0);
 
-            await instance.releaseStake(stakeId, secondAccount, { from: controllerAccount });
+            await instance.releaseStake(stakeId, userAccount, { from: controllerAccount });
 
             const availableTokensAfterRelease = await instance.getAvailableStakeCount.call();
             expect(availableTokensAfterRelease.toNumber()).to.equal(1);
@@ -127,19 +128,19 @@ contract('Staking', accounts => {
         })
 
         it('should not allow non-stake controller', async () => {
-            await instance.deposit(0, { from: secondAccount });
-            await instance.stake(stakeId, 0, { from: controllerAccount });
-            await assertRevert(instance.releaseStake(stakeId, secondAccount, { from: secondAccount }));
+            await instance.deposit(tokenId, { from: userAccount });
+            await instance.stake(stakeId, tokenId, userAccount, { from: controllerAccount });
+            await assertRevert(instance.releaseStake(stakeId, userAccount, { from: userAccount }));
         });
 
         it('should not allow non-staked tokens to be released', async () => {
-            await instance.deposit(0, { from: secondAccount });
-            await assertRevert(instance.releaseStake(stakeId, secondAccount, { from: controllerAccount }));
+            await instance.deposit(tokenId, { from: userAccount });
+            await assertRevert(instance.releaseStake(stakeId, userAccount, { from: controllerAccount }));
         });
 
         it('should not allow tokens to be released to a different owner', async () => {
-            await instance.deposit(0, { from: secondAccount });
-            await assertRevert(instance.releaseStake(stakeId, firstAccount, { from: controllerAccount }));
+            await instance.deposit(tokenId, { from: userAccount });
+            await assertRevert(instance.releaseStake(stakeId, deployerAccount, { from: controllerAccount }));
         });
     });
 
@@ -152,12 +153,12 @@ contract('Staking', accounts => {
         })
 
         it('should allow stake to burn', async () => {
-            await instance.deposit(tokenId, { from: secondAccount });
+            await instance.deposit(tokenId, { from: userAccount });
             availableTokens = await instance.getAvailableStakeCount.call();
             expect(availableTokens.toNumber()).to.equal(1);
-            await instance.stake(stakeId, 0, { from: controllerAccount });
+            await instance.stake(stakeId, tokenId, userAccount, { from: controllerAccount });
 
-            await instance.burnStake(stakeId, secondAccount, { from: controllerAccount });
+            await instance.burnStake(stakeId, userAccount, { from: controllerAccount });
 
             const availableTokensAfterRelease = await instance.getAvailableStakeCount.call();
             expect(availableTokensAfterRelease.toNumber()).to.equal(0);
@@ -167,19 +168,44 @@ contract('Staking', accounts => {
         })
 
         it('should not allow non-stake controller', async () => {
-            await instance.deposit(0, { from: secondAccount });
-            await instance.stake(stakeId, 0, { from: controllerAccount });
-            await assertRevert(instance.burnStake(stakeId, secondAccount, { from: secondAccount }));
+            await instance.deposit(tokenId, { from: userAccount });
+            await instance.stake(stakeId, tokenId, userAccount, { from: controllerAccount });
+            await assertRevert(instance.burnStake(stakeId, userAccount, { from: userAccount }));
         });
 
         it('should not allow non-staked tokens to be burned', async () => {
-            await instance.deposit(0, { from: secondAccount });
-            await assertRevert(instance.burnStake(stakeId, secondAccount, { from: controllerAccount }));
+            await instance.deposit(tokenId, { from: userAccount });
+            await assertRevert(instance.burnStake(stakeId, userAccount, { from: controllerAccount }));
         });
 
         it('should not allow tokens from the wrong owner to be burned', async () => {
-            await instance.deposit(0, { from: secondAccount });
-            await assertRevert(instance.burnStake(stakeId, firstAccount, { from: controllerAccount }));
+            await instance.deposit(tokenId, { from: userAccount });
+            await instance.stake(stakeId, tokenId, userAccount, { from: controllerAccount });
+            await assertRevert(instance.burnStake(stakeId, deployerAccount, { from: controllerAccount }));
         });
+    });
+
+    describe('get staker', () => {
+        let stakeId, tokenId, availableTokens;
+
+        beforeEach(() => {
+            stakeId = web3.fromAscii('stakid');
+            tokenId = 2;
+        })
+
+        it('should return address of the staker of the token', async () => {
+            await instance.deposit(tokenId, { from: userAccount });
+            availableTokens = await instance.getAvailableStakeCount.call();
+            expect(availableTokens.toNumber()).to.equal(1);
+            await instance.stake(stakeId, tokenId, userAccount, { from: controllerAccount });
+
+            const staker = await instance.getStaker.call(stakeId);
+            expect(staker).to.equal(userAccount);
+        })
+
+        it('should fail if no token matches stakeId', async () => {
+            await instance.deposit(tokenId, { from: userAccount });
+            await assertRevert(instance.getStaker.call(web3.fromAscii('notastakid')));
+        })
     });
 });
