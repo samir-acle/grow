@@ -25,11 +25,12 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
     // DATA STRUCTURES:
     // ============
     using SafeMath for uint;
+    uint constant EXPIRATION_WINDOW = 7 days;
+    bytes32 constant FIRST_PLEDGE_HASH = 0x031a407d08e694c85e1ef4c7cbcfb1a529e05ee4f79a84fcc46f8ff36ca214e2;
 
     // ============
     // STATE VARIABLES:
     // ============
-
     uint public proofFee;
     uint private pot;
     GrowToken private growToken;
@@ -46,13 +47,7 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
     }
 
     modifier stakingNotEnabled() {
-        require(staking != address(0));
-        require(staking.paused());
-        _;
-    }
-
-    modifier onlyReviewer(bytes32 _proofId) {
-        require(msg.sender == proofIdToProof[_proofId].reviewer);
+        require(staking == address(0) || staking.paused());
         _;
     }
 
@@ -110,17 +105,19 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
             ableToCoverFees(collateralPerProof), 
             "Must have enought collateral to cover fees"
         );
-        require(
-            inAscendingOrder(_proofExpirations), 
-            "Proof expirations must be sorted with soonest expiration first"
-        );
+        // check gas costs of either way
+        // require(
+        //     inAscendingOrder(_proofExpirations), 
+        //     "Proof expirations must be sorted with soonest expiration first"
+        // );
 
         // should mayeb add total to pledge
         // remainder will be added to the pot? which lives where probably here 
 
         pledgeId = createPledge(_hashDigest, numOfProofs);
         createEmptyProofs(pledgeId, _proofExpirations, collateralPerProof);
-        mintTokenIfFirstPledge(_hashDigest);
+        // TODO - hardcode ipfs thing here
+        mintTokenIfFirstPledge();
         return pledgeId;
     }
 
@@ -138,11 +135,9 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
         whenNotPaused
         onlyPledgeOwner(_pledgeId)
         onlyIsProof(_proofId)
-        onlyIfPreviousProofComplete(_pledgeId)
         onlyNextProofInOrder(_proofId, _pledgeId)
-        onlyPledgeState(_proofId, PledgeState.Active)
         onlyProofState(_proofId, ProofState.Pending)
-        onlyNotExpired(_proofId)
+        // onlyNotExpired(_proofId)
     {
         submitProofDetails(_ipfsHash, _proofId);
     }
@@ -157,7 +152,8 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
         whenNotPaused
         onlyIsProof(_proofId)
         onlyActiveProof(_proofId)
-        onlyExpired(_proofId)
+        // onlyExpired(_proofId)
+        onlyCurrentProofOrBefore(_proofId)
     {
         uint collateral = proofIdToProof[_proofId].collateral;
         require(address(this).balance >= collateral);
@@ -166,7 +162,12 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
 
         if (proofIdToProof[_proofId].state == ProofState.Pending) {
             addToPot(remainingCollateral);
-            pledgeIdToNextProofIndex[proofIdToProof[_proofId].pledgeId]++;
+            // this line might allow for weird stuff, like if you expire something not in order
+            uint nextProofIndex = pledgeIdToNextProofIndex[proofIdToProof[_proofId].pledgeId];
+            uint expiredIndexInPledge = proofIdToProof[_proofId].indexInPledge;
+            if (expiredIndexInPledge >= nextProofIndex) {
+                pledgeIdToNextProofIndex[proofIdToProof[_proofId].pledgeId] = expiredIndexInPledge.add(1);
+            }
             updateProofState(_proofId, ProofState.Expired);
         } else if (proofIdToProof[_proofId].state == ProofState.Submitted) {
             autoApproveProof(_proofId, remainingCollateral);
@@ -198,10 +199,15 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
         if (_approved) {
             updateProofState(_proofId, ProofState.Accepted);
             refundProofOwner(_proofId, remainingCollateral);
+            address pledgeOwner = pledgeIdToPledge[proofIdToProof[_proofId].pledgeId].owner;
+            growToken.mint(proofIdToProof[_proofId].metadata, pledgeOwner);
         } else {
             updateProofState(_proofId, ProofState.Rejected);
             addToPot(remainingCollateral);
         }
+
+        // deleteReviewerProofAtIndex(msg.sender, proofIdToReviewerIndex[_proofId]); 
+        // addressToAssignedProofs[msg.sender].push(_proofId) - 1;
 
         staking.releaseStake(_proofId, msg.sender);
 
@@ -232,7 +238,7 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
     {
         updateProofState(_proofId, ProofState.Assigned);
         proofIdToProof[_proofId].reviewer = msg.sender;
-        proofIdToProof[_proofId].expiresAt = now + 7 days;
+        proofIdToProof[_proofId].expiresAt = now.add(EXPIRATION_WINDOW);
         staking.stake(_proofId, _tokenId, msg.sender);
 
         emit ReviewerAssigned(
@@ -254,6 +260,7 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
     ) 
         private 
     {
+        // TODO - improve gas cost here by forming in memory proof array then updating once
         bytes32[] storage proofs = pledgeIdToPledge[_pledgeId].proofs;
 
         for (uint i = 0; i < _proofExpirations.length; i++) {
@@ -280,9 +287,10 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
         }
     }
 
-    function mintTokenIfFirstPledge(bytes32 _hashDigest) private returns (bool tokenWasMinted) {
+    function mintTokenIfFirstPledge() private returns (bool tokenWasMinted) {
         if (userAddressToNumberOfPledges[msg.sender] == 1) {
-            growToken.mint(_hashDigest, msg.sender);
+            growToken.mint(FIRST_PLEDGE_HASH, msg.sender);
+            return true;
         }
     }
 

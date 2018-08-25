@@ -23,10 +23,8 @@ class NewProof extends Component {
 
     submitProof = () => {
         const ipfsHashBytes32 = ipfsHashToBytes32(this.state.ipfsHash);
-
-        console.log('ip', ipfsHashBytes32);
-        console.log('pled', this.props.pledgeId);
-        console.log('proof', this.props.proofId);
+        
+        console.log('sending these params:', ipfsHashBytes32, this.props.pledgeId, this.props.proofId);
 
         this.contract.methods.submitProof.cacheSend(
             ipfsHashBytes32,

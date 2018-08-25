@@ -8,12 +8,7 @@ import IpfsRetriever from '../IPFS/IpfsRetriever';
 import ContractStateRetriever from '../ContractStateRetriever';
 import { Link } from 'react-router-dom';
 import Proofs from '../Proof/Proofs';
-
-const PledgeState = {
-    '0': 'Active',
-    '1': "Completed",
-    '2': 'Expired',
-};
+import { PledgeState } from '../constants';
 
 export const PledgeDetails = ({ title, what, where, when, why }) => {
     return (
@@ -28,7 +23,7 @@ export const PledgeDetails = ({ title, what, where, when, why }) => {
     )
 }
 
-// maybe HOC for active, expired, all, completed states...  could share with prood
+// maybe HOC for active, expired, all, completed states...  could share with proof
 
 export const FilterPledge = ({ pledge, requiredStates, id }) => {
     if (!requiredStates.includes(PledgeState[pledge.pledgeState])) return null;
@@ -41,7 +36,7 @@ export const FilterPledge = ({ pledge, requiredStates, id }) => {
 const PledgeListElement = ({ pledgeData, id }, context) => {
     return (
         <Box>
-            <IpfsRetriever hash={pledgeData.metadataHash} render={({ data }) => (
+            <IpfsRetriever hash={pledgeData.metadata} render={({ data }) => (
                 <h2>{data.title}</h2>
             )} />
             <Link to={`/pledges/${id}`}>View Pledge</Link>
@@ -76,10 +71,9 @@ const Pledge = ({ pledgeData }) => {
                 <p>owner: {pledgeData.owner}</p>
                 <p>collateral: {pledgeData.collateral}</p>
                 <p>numOfProofs: {pledgeData.numOfProofs}</p>
-                <div>proofs: {pledgeData.proofs.map(id => <p>{id}</p>)}</div>
             </Box>
 
-            <IpfsRetriever hash={pledgeData.metadataHash} render={({ data }) => (
+            <IpfsRetriever hash={pledgeData.metadata} render={({ data }) => (
                 <PledgeDetails {...data} />
             )} />
         </Box>

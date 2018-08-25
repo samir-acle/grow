@@ -1,9 +1,8 @@
 pragma solidity ^0.4.23;
 import "openzeppelin-solidity/contracts/lifecycle/Pausable.sol";
-import "./IpfsStorage.sol";
 import "./Proof.sol";
 
-contract Pledge is Pausable, IpfsStorage, Proof {
+contract Pledge is Pausable, Proof {
     // ============
     // EVENTS:
     // ============
@@ -16,7 +15,7 @@ contract Pledge is Pausable, IpfsStorage, Proof {
     enum PledgeState { Active, Completed, Expired }
 
     struct PledgeStruct {
-        MultiHash metadata;
+        bytes32 metadata;
         uint index;
         address owner;
         PledgeState state;
@@ -57,15 +56,14 @@ contract Pledge is Pausable, IpfsStorage, Proof {
         _;
     }
 
-    modifier onlyIfPreviousProofComplete(bytes32 _pledgeId) {
-        if (pledgeIdToNextProofIndex[_pledgeId] > 0) {
-            uint lastProofIndex = pledgeIdToNextProofIndex[_pledgeId].sub(1);
-            bytes32 lastProofId = pledgeIdToPledge[_pledgeId].proofs[lastProofIndex];
-            ProofState lastProofState = proofIdToProof[lastProofId].state;
-            require(lastProofState == ProofState.Accepted ||
-                lastProofState == ProofState.Rejected ||
-                lastProofState == ProofState.Expired);
-        }
+    modifier onlyIfPreviousProofNotPending(bytes32 _pledgeId) {
+        require(previousProofIsNotPending(_pledgeId));
+        _;
+    }
+
+    modifier onlyCurrentProofOrBefore(bytes32 _proofId) {
+        uint currentProofIndex = pledgeIdToNextProofIndex[proofIdToProof[_proofId].pledgeId];
+        require(proofIdToProof[_proofId].indexInPledge <= currentProofIndex);
         _;
     }
 
@@ -86,7 +84,7 @@ contract Pledge is Pausable, IpfsStorage, Proof {
         view
         onlyIsPledge(_pledgeId)
         returns(
-            bytes32 metadataHash,
+            bytes32 metadata,
             uint index,
             address owner,
             PledgeState pledgeState,
@@ -94,15 +92,13 @@ contract Pledge is Pausable, IpfsStorage, Proof {
             uint numOfProofs
         )
     {
-        uint size = pledgeIdToPledge[_pledgeId].proofs.length;
-
         return (
-            pledgeIdToPledge[_pledgeId].metadata.hashDigest,
+            pledgeIdToPledge[_pledgeId].metadata,
             pledgeIdToPledge[_pledgeId].index,
             pledgeIdToPledge[_pledgeId].owner,
             pledgeIdToPledge[_pledgeId].state,
             pledgeIdToPledge[_pledgeId].proofs,
-            size        
+            pledgeIdToPledge[_pledgeId].proofs.length      
         );
     }
 
@@ -113,17 +109,17 @@ contract Pledge is Pausable, IpfsStorage, Proof {
         internal 
         returns(bytes32 pledgeId)
     {
-        pledgeId = keccak256(abi.encodePacked(msg.sender, userAddressToNumberOfPledges[msg.sender] + 1));
+        pledgeId = keccak256(abi.encodePacked(msg.sender, userAddressToNumberOfPledges[msg.sender].add(1)));
 
         require(!isPledge(pledgeId), "Pledge must not already exist");
 
-        pledgeIdToPledge[pledgeId].metadata = createIpfsMultiHash(_ipfsHash);
-        pledgeIdToPledge[pledgeId].index = pledges.push(pledgeId) - 1;
+        pledgeIdToPledge[pledgeId].metadata = _ipfsHash;
+        pledgeIdToPledge[pledgeId].index = pledges.push(pledgeId).sub(1);
         pledgeIdToPledge[pledgeId].owner = msg.sender;
         pledgeIdToPledge[pledgeId].state = PledgeState.Active;
         pledgeIdToPledge[pledgeId].proofs = new bytes32[](_numOfProofs);
 
-        userAddressToNumberOfPledges[msg.sender]++;
+        userAddressToNumberOfPledges[msg.sender] = userAddressToNumberOfPledges[msg.sender].add(1);
         // can inline this above
 
         emit NewPledge(msg.sender, pledgeIdToPledge[pledgeId].index, _ipfsHash);
@@ -153,6 +149,16 @@ contract Pledge is Pausable, IpfsStorage, Proof {
         returns(bytes32 pledgeId)
     {
         return pledges[index];
+    }
+
+    function previousProofIsNotPending(bytes32 _pledgeId) internal returns (bool wasCompleted) {
+        if (pledgeIdToNextProofIndex[_pledgeId] > 0) {
+            uint lastProofIndex = pledgeIdToNextProofIndex[_pledgeId].sub(1);
+            bytes32 lastProofId = pledgeIdToPledge[_pledgeId].proofs[lastProofIndex];
+            return proofIdToProof[lastProofId].state != ProofState.Pending;
+        } else {
+            return true;
+        }
     }
 }
 

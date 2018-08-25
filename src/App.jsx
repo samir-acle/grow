@@ -7,7 +7,8 @@ import Pledges from "./Pledge/Pledges";
 // import Pledges2 from "../Pledges2";
 import { PledgeView } from "./Pledge/Pledge";
 import NewProofContainer from "./Proof/NewProofContainer";
-
+import TokenContainer from "./Staking/TokenContainer";
+import Review from "./ProofReview/ProofAssignments";
 import { BrowserRouter as Router, Link, Route, Switch } from 'react-router-dom';
 
 class App extends Component {
@@ -32,12 +33,14 @@ class App extends Component {
               <Box background='brand'>
                 {/* Placeholder for logo */}
                 <Link to='/pledges'>Pledge</Link>
-                <div>Review</div>
-                <div>Account</div>
+                <Link to='/review'>Review</Link>
+                <Link to='/tokens'>Staking</Link>
               </Box>
 
               <Box background='accent-3'>
                 <Route path="/pledges" component={Pledges} />
+                <Route path="/review" component={Review} />
+                <Route path="/tokens" component={TokenContainer} />
               </Box>
 
               {/* TODO - consistantyl use render props? */}

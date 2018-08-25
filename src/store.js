@@ -4,6 +4,8 @@ import rootSaga from './rootSaga';
 import { createStore, applyMiddleware, compose } from 'redux';
 import reducer from './reducer';
 import Grow from 'Contracts/Grow.json';
+import GrowToken from 'Contracts/GrowToken.json';
+import Staking from 'Contracts/Staking.json';
 
 const sagaMiddleware = createSagaMiddleware();
 const composeEnhancers = window.__REDUX_DEVTOOLS_EXTENSION_COMPOSE__ || compose;
@@ -11,6 +13,8 @@ const composeEnhancers = window.__REDUX_DEVTOOLS_EXTENSION_COMPOSE__ || compose;
 export const drizzleOptions = {
   contracts: [
       Grow,
+      GrowToken,
+      Staking,
   ]
 };
 

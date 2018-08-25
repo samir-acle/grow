@@ -12,8 +12,13 @@ contract GrowToken is ERC721Token("GrowToken", "GROW"), Ownable {
         // ============
     // EVENTS:
     // ============
-    event GrowTokenMinted(address indexed ownerAddress, bytes32 tokenDetails, uint tokenId);
-    event GrowTokenBurned(address indexed ownerAddress, bytes32 tokenDetails, uint tokenId);
+    event GrowTokenMinted(address ownerAddress, bytes32 tokenDetails, uint tokenId);
+    event GrowTokenBurned(address ownerAddress, bytes32 tokenDetails, uint tokenId);
+
+    // ============
+    // DATA STRUCTURES:
+    // ============
+    using SafeMath for uint;
 
     // ============
     // STATE VARIABLES:
@@ -63,7 +68,7 @@ contract GrowToken is ERC721Token("GrowToken", "GROW"), Ownable {
         public
         onlyMinter
     {
-        uint tokenId = tokenDetails.push(_tokenDetailsHash) - 1;
+        uint tokenId = tokenDetails.push(_tokenDetailsHash).sub(1);
         _mint(_toAddress, tokenId);
         emit GrowTokenMinted(_toAddress, _tokenDetailsHash, tokenId);
     }
@@ -77,6 +82,25 @@ contract GrowToken is ERC721Token("GrowToken", "GROW"), Ownable {
     {
         _burn(msg.sender, _tokenId);
         emit GrowTokenBurned(msg.sender, tokenDetails[_tokenId], _tokenId);
+    } 
+
+    /** @dev Get owned token ids for a given address.
+      * @param _index The index of the token
+      */
+    function getOwnedToken(uint _index) public view returns (uint tokenId, bytes32 detailsHash) {
+        // require(ownedTokens[msg.sender].length > _index);
+        uint token = ownedTokens[msg.sender][_index];
+        return (
+            token,
+            tokenDetails[token]
+        );
+    }
+
+    /** @dev Get owned token count for a given address.
+      */
+    function getOwnedTokenCount() public view returns (uint count) {
+        // require(ownedTokens[msg.sender].length > _index);
+        return ownedTokensCount[msg.sender];
     }    
 }
 

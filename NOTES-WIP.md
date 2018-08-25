@@ -126,25 +126,26 @@ learnings
 - set block time to instant for tests :_(
 
 
-TODO
-- withdraw balance tests in solidity?
-- fallback function?
-- think about delays
-- fail safe that transfers collateral to balances and allows withdrawals...
-- when paused - self approve proofs?
-- limit amount of ether... how?
-- refactor balance addings into method in useraccount that will emit event?
+Icebox
 - events for expires
-- expiration a constant or configurable
 - Pledge state - set to expired/completed...
 - for changing of prooffee, need to make sure there are no active pledges
+- when paused - self approve proofs?
+- think about delays
+    -    maybe delay between calling expire =?
+- fail safe that transfers collateral to balances and allows withdrawals...
+- limit amount of ether... how?
+- time submitted - end of day...
 
 tests to add
-    - submit proof only if previous proof complete?
+    - withdraw balance test
     - grow token tests maybe not done
+    - expired logic  // ALMOST, JUST SKIPPED TEST - lot of expired stuff dont work, neeed to fix
+    - proofs for assignment
 
 - when expiring, should the person who calls it get something? The proof fee?  but then what incentivizes someone to actually stake and review?  need to make it so they get some of the pot...
 - clean up
+    - rethink file separation
     - move most requires to modifiers
     - should modifiers all be on the public method rather than internal?
     - validate inputs
@@ -157,3 +158,43 @@ tests to add
     - gas cost testing
     - combine approve and reject into one method since most tests are same
 
+get rid of all 0 index
+
+GAS ISSUES (to fix or at least point out)
+    - do not loop through unbounded array
+        - either bound or do on client side
+    - deposit needs 300k gas... look into it
+    - find out gas costs of all methods...
+    - submit pledge costs 6000000??
+
+ACTUAL TODOS
+  - Fix submitting pledge  ( was an issue with the lastProofPending modifier - untested - write tests, get to work, then try again)
+  - Add comments and finish tests for solidity code
+  - Add fallback function (if needed) and self destruct (if needed)
+  - Style all completed frontend components and clean up code
+  - Create user stories for work completed (put on trello and link making public)
+      the planned work and bug fixes
+  - Improve gas costs - look at crypto zombies about struct uint ordering
+    - create a gas cost analysis for top methods for learning
+    - Remove proof in order expiration time (should be client responsibility)
+    - Add limit to size of proof array
+
+
+  - Once the above is done, move on to working on the NEXT user story
+  
+  - Review Screen
+  - Withdraw Eth Screen
+  - Units of Ether on FrontEnd
+
+
+FUTURE
+- helpers for easy accessing pledge stuff from proof id and vice versa
+- explore using built in TokenUris for growtoken
+- make staking contract reusable for any ERC721 token
+- make library for deleting and adding to array (but maybe more expensive)
+
+
+
+TODOOOOO
+- expired tests and stuff is commmentd out/skipped because not working
+- try subtracting and making sure > 0 

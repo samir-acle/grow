@@ -7,6 +7,7 @@ const HASH_SIZE = parseInt(20, 16);
 
 export const ipfsHashToBytes32 = (hash) => {
     const decoded = bs58.decode(hash);
+    console.log('decoded:', decoded);
     return `0x${decoded.slice(2).toString('hex')}`;
 };
 

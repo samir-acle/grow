@@ -216,7 +216,7 @@ class Collateral extends Component {
 const ProofExpirationList = ({ expirations }) => {
     return (
         <Fragment>
-            {expirations.map(p => <p>Dates: {moment(p).format('YYYY-MM-DD')}</p>)}
+            {expirations.map(p => <p key={p}>Dates: {moment(p).format('YYYY-MM-DD')}</p>)}
         </Fragment>
     )
 }
@@ -283,7 +283,9 @@ class NewPledge extends Component {
 
         const expirationsInSeconds = expirations.map(ex => ex / 1000);
         const ipfsHash = await this.saveIPFSHash(JSON.stringify(details));
+        console.log('before stripping to 32');
         const ipfsHashBytes32 = ipfsHashToBytes32(ipfsHash);
+        console.log('after stripping:', ipfsHashBytes32);
         // const collateralInWei = web3.toWei(totalCollateral, 'ether');
 
         this.contract.methods.initPledge.cacheSend(expirationsInSeconds, ipfsHashBytes32, {
@@ -298,6 +300,7 @@ class NewPledge extends Component {
         const buffer = Buffer.from(data);
         const files = await ipfs.add(buffer);
         const ipfsHash = files[0].hash;
+        console.log('ipfhs hash:', ipfsHash);
         return ipfsHash;
     }
 

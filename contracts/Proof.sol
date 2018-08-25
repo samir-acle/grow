@@ -1,10 +1,9 @@
 pragma solidity ^0.4.23;
-import "./IpfsStorage.sol";
 import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 
 // constants for expires etc
 
-contract Proof is IpfsStorage {
+contract Proof {
 
     // ============
     // EVENTS:
@@ -38,10 +37,11 @@ contract Proof is IpfsStorage {
     // ============
     using SafeMath for uint;
     enum ProofState { Pending, Submitted, Assigned, Accepted, Rejected, Expired }
+    uint constant EXPIRATION_WINDOW = 7 days;
     // maybe add assigned, maybe optional?
     
     struct ProofStruct {
-        MultiHash metadata;
+        bytes32 metadata;
         bytes32 pledgeId;
         uint index;
         uint indexInPledge;
@@ -58,7 +58,7 @@ contract Proof is IpfsStorage {
     // TODO - if this is just for verifying that the proof is real, can use the pledegindex....
     bytes32[] private proofs;  
     mapping(bytes32 => uint) public pledgeIdToNextProofIndex;
-
+     
     // ============
     // MODIFIERS:
     // ============
@@ -68,14 +68,22 @@ contract Proof is IpfsStorage {
     }
 
     modifier onlyNotExpired(bytes32 _proofId) {
-        require(proofIdToProof[_proofId].expiresAt >= now);
+        require(isNotExpired(proofIdToProof[_proofId].expiresAt));
         _;
     }
 
     modifier onlyExpired(bytes32 _proofId) {
-        require(proofIdToProof[_proofId].expiresAt < now);
+        require(isExpired(proofIdToProof[_proofId].expiresAt));
         _;
     }
+
+    function isNotExpired(uint _expiration) internal returns (bool) {
+        return _expiration >= now;
+    }
+
+    function isExpired(uint _expiration) internal returns (bool) {
+        return _expiration < now;
+    }    
 
     modifier onlyIsProof(bytes32 _proofId) {
         require(isProof(_proofId), "Must be an existing proof");
@@ -122,8 +130,8 @@ contract Proof is IpfsStorage {
 
         proofIdToProof[proofId].pledgeId = _pledgeId;
         proofIdToProof[proofId].expiresAt = _expiresAt;
-        proofIdToProof[proofId].index = proofs.push(proofId) - 1;
-        proofIdToProof[proofId].indexInPledge = _proofNumberInPledge - 1;
+        proofIdToProof[proofId].index = proofs.push(proofId).sub(1);
+        proofIdToProof[proofId].indexInPledge = _proofNumberInPledge.sub(1);
         proofIdToProof[proofId].state = ProofState.Pending;
         proofIdToProof[proofId].collateral = _collateral;
 
@@ -150,17 +158,17 @@ contract Proof is IpfsStorage {
     {
         bytes32 pledgeId = proofIdToProof[_proofId].pledgeId;
 
-        proofIdToProof[_proofId].metadata = createIpfsMultiHash(_metadata);
+        proofIdToProof[_proofId].metadata = _metadata;
         updateProofState(_proofId, ProofState.Submitted);
-        proofIdToProof[_proofId].expiresAt = now + 7 days;
+        proofIdToProof[_proofId].expiresAt = now.add(EXPIRATION_WINDOW);
 
-        pledgeIdToNextProofIndex[pledgeId]++;
+        pledgeIdToNextProofIndex[pledgeId] = pledgeIdToNextProofIndex[pledgeId].add(1);
 
         emit ProofSubmitted(
             msg.sender, 
             pledgeId,
             _proofId,
-            proofIdToProof[_proofId].metadata.hashDigest,
+            proofIdToProof[_proofId].metadata,
             proofIdToProof[_proofId].indexInPledge
         );
     }
@@ -200,7 +208,7 @@ contract Proof is IpfsStorage {
         require(isProof(_proofId));
 
         return (
-            proofIdToProof[_proofId].metadata.hashDigest,
+            proofIdToProof[_proofId].metadata,
             proofIdToProof[_proofId].pledgeId,
             proofIdToProof[_proofId].indexInPledge,
             proofIdToProof[_proofId].expiresAt,

@@ -1,30 +1,10 @@
 import React, { Component } from 'react';
+import PropTypes from 'prop-types';
+import moment from 'moment';
 import MultipleContractStateRetriever from '../MultipleContractStateRetriever';
 import { Link } from 'react-router-dom';
-import { Box, Text } from 'grommet';
-
-const ProofState = {
-    '0': {
-        display: 'Pending',
-        status: 'unknown',
-    },
-    '1': {
-        display: 'Subitted',
-        status: 'warning'
-    },
-    '2': {
-        display: 'Accepted',
-        status: 'ok',
-    },
-    '3': {
-        display: 'Rejected',
-        status: 'error'
-    },
-    '4': {
-        display: 'Expired',
-        status: 'critical'
-    },
-};
+import { Box, Text, Button } from 'grommet';
+import { ProofState, activeProofStates, PENDING } from '../constants';
 
 class Proofs extends Component {
 
@@ -33,29 +13,41 @@ class Proofs extends Component {
     }
 
     render() {
-
+        console.log('in proofs');
         return (
             <MultipleContractStateRetriever contract="Grow" method="getProof" args={this.props.proofIds} render={({ contractData, args }) => (
                 <Box>
-                    {contractData.map((cd, i) => <Proof {...cd} proofId={args[i]} />)}
+                    {contractData.map((cd, i) => <Proof key={args[i]} {...cd} proofId={args[i]} />)}
                 </Box>
             )} />
         )
-        // button to create new proof
     }
 }
 
-class Proof extends Component {
+const isExpired = (timestampInSeconds) => {
+    return Date.now() > (timestampInSeconds * 1000);
+};
 
-    render() {
-        return (
-            <Box background={`status-${ProofState[this.props.state].status}`}>
-                {ProofState[this.props.state].display === 'Pending' && <Link to={`/proofs/${this.props.proofId}/submit`}>Submit Proof</Link>}
-                <Text>{ProofState[this.props.state].display}</Text>
-            </Box>
-        )
-    }
-}
+const isActiveProof = (state) => {
+    return activeProofStates.includes(state);
+};
+
+const Proof = ({ state, proofId, expiresAt }, context) => {
+    console.log('returning proof', ProofState, proofId, expiresAt);
+    return (
+        <Box background={`status-${ProofState[state].status}`}>
+            {ProofState[state].display === PENDING && <Link to={`/proofs/${proofId}/submit`}>Submit Proof</Link>}
+            {isActiveProof(state) && isExpired(expiresAt) && <Button label="Expire Proof" onClick={() => context.drizzle.contracts.Grow.methods.expireProof.cacheSend(proofId)} />}
+            {moment(expiresAt * 1000).format('YYYY-MM-DD HH:MM')}
+            <Text>{ProofState[state].display}</Text>
+        </Box>
+    )
+};
+
+Proof.contextTypes = {
+    drizzle: PropTypes.object,
+    drizzleStore: PropTypes.object,
+};
 
 export default Proofs;
 

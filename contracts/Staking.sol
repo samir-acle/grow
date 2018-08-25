@@ -18,14 +18,18 @@ contract Staking is Pausable, ERC721Holder {
     // ============
     // DATA STRUCTURES:
     // ============
+    using SafeMath for uint;
 
     // ============
     // STATE VARIABLES:
     // ============
-    mapping(uint => address) private tokenIdToOwner;
+    mapping(uint => address) public tokenIdToOwner;
     mapping(uint => uint) private tokenIdToAvailableIndex;
-    uint[] private availableTokens;
+    uint[] public availableTokens;
+    mapping(uint => uint) private tokenIdToStakedIndex;
+    uint[] public stakedTokens;
     mapping( bytes32 => uint) public stakeIdToTokenId;
+
     GrowToken private growToken;
     address private controller;
 
@@ -33,42 +37,40 @@ contract Staking is Pausable, ERC721Holder {
     // MODIFIERS:
     // ============
     modifier onlyController {
-        require(controller != address(0));
-        require(msg.sender == controller);
+        require(controller != address(0), "A controller must be set");
+        require(msg.sender == controller, "The sender must be the controller");
         _;
     }
 
     modifier onlyTokenOwner(uint _tokenId, address _addressToVerify) {
-        require(_addressToVerify != address(0));
-        require(_addressToVerify == tokenIdToOwner[_tokenId]);
+        require(_addressToVerify != address(0), "The token must be owned");
+        require(_addressToVerify == tokenIdToOwner[_tokenId], "The address must match the token owner");
         _;
     }
 
     modifier onlyAvailableTokens(uint _tokenId) {
-        require(availableTokens[tokenIdToAvailableIndex[_tokenId]] == _tokenId);
+        require(availableTokens[tokenIdToAvailableIndex[_tokenId]] == _tokenId, "The token must be available for staking");
         _;
     }
 
     modifier onlyOriginalStaker(bytes32 _stakeId, address _staker) {
-        require(tokenIdToOwner[stakeIdToTokenId[_stakeId]] == _staker);
+        require(tokenIdToOwner[stakeIdToTokenId[_stakeId]] == _staker, "Only the token owner can be the staker");
         _;
     }
 
     modifier onlyIfStaked(bytes32 _stakeId) {
         if (availableTokens.length > 0) {
             uint tokenId = stakeIdToTokenId[_stakeId];
-            require(tokenIdToOwner[tokenId] != address(0));
-            require(availableTokens[tokenIdToAvailableIndex[tokenId]] != tokenId);
+            require(tokenIdToOwner[tokenId] != address(0), "The token must be owned");
+            require(availableTokens[tokenIdToAvailableIndex[tokenId]] != tokenId, "The token must not be available for staking");
         }
         _;
     }
 
-// TODO - test this new stake stuff
-// comment that if tokenid is 0 it wont work but this will be mitigated
-// by controlling and burning it
-
+    // if tokenid is actually token with id 0, this wont work.
+    // This will be mitigated by burning token 0 during deployment.
     modifier onlyUnusedStakeId(bytes32 _stakeId) {
-        require(stakeIdToTokenId[_stakeId] == 0);
+        require(stakeIdToTokenId[_stakeId] == 0, "Cannot stake a token for an id that is already staked");
         _;
     }
 
@@ -76,16 +78,44 @@ contract Staking is Pausable, ERC721Holder {
         growToken = GrowToken(_growTokenAddress);
     }
 
-    /** @dev Set the controller that can stake and burn.
+    /** @dev Check if token is deposited.
+    * @param _tokenId The token that is being checked.
+    * @return bool true if deposited, false if not
+    */
+    function isTokenDeposited(uint _tokenId) public view returns(bool isDeposited) {
+        return tokenIdToOwner[_tokenId] != address(0);
+    }
+
+    /** @dev Check if token is staked.
+    * @param _tokenId The token that is being checked.
+    * @return bool true if staked, false if not
+    */
+    function isTokenStaked(uint _tokenId) public view returns(bool isStaked) {
+        if (isTokenDeposited(_tokenId)) {
+            return tokenIdToAvailableIndex[_tokenId] == 0;
+        } else {
+            return false;
+        }
+    }
+
+    /** @dev Get the number of tokens available for staking.
+    * @return uint number of available tokens
+    */
+    function getAvailableTokenCount() public view returns(uint count) {
+        return availableTokens.length;
+    }
+
+    /** @dev Get the number of tokens being staking.
+    * @return uint number of staked tokens
+    */
+    function getStakedTokenCount() public view returns(uint count) {
+        return stakedTokens.length;
+    }
+
+    /** @dev Set the contract address that can stake and burn.
     */
     function setController(address _controller) public onlyOwner {
         controller = _controller;
-    }
-
-    /** @dev Get total number of available tokens for staking.
-    */
-    function getAvailableStakeCount() public view returns(uint availableStakes) {
-        return availableTokens.length;
     }
 
     /** @dev Add token to the available stake pool.
@@ -98,7 +128,6 @@ contract Staking is Pausable, ERC721Holder {
         emit DepositToken(msg.sender, _tokenId);
     }
 
-    // TODO - REENTRANCY
     /** @dev Withdraw tokens from the stake pool.
     * @param _tokenId The token that is being withdrawn.
     */
@@ -118,10 +147,10 @@ contract Staking is Pausable, ERC721Holder {
         emit WithdrawToken(tokenOwner, _tokenId);
     }
 
-    // could technically use this to stake for other things??
     /** @dev Stake token.
     * @param _stakeId An identifier for the stake for the controller
     * @param _tokenId The token to stake.
+    * @param _staker The address of the token owner
     */
     function stake(bytes32 _stakeId, uint _tokenId, address _staker) public 
         whenNotPaused 
@@ -130,7 +159,9 @@ contract Staking is Pausable, ERC721Holder {
         onlyUnusedStakeId(_stakeId)
     {
         deleteAvailableTokenAtIndex(tokenIdToAvailableIndex[_tokenId]);
+        delete tokenIdToAvailableIndex[_tokenId];
         stakeIdToTokenId[_stakeId] = _tokenId;
+        addTokenToStaked(_tokenId);
         emit StakeToken(_staker, _tokenId, _stakeId);
     }
 
@@ -145,6 +176,9 @@ contract Staking is Pausable, ERC721Holder {
         onlyOriginalStaker(_stakeId, _staker)
     {
         uint tokenToRelease = stakeIdToTokenId[_stakeId];
+        uint indexToDelete = tokenIdToStakedIndex[tokenToRelease];
+
+        deleteStakedTokenAtIndex(indexToDelete);
         delete stakeIdToTokenId[_stakeId];
         addTokenToAvailable(tokenToRelease);
         emit ReleaseStakedToken(_staker, tokenToRelease, _stakeId);
@@ -161,6 +195,9 @@ contract Staking is Pausable, ERC721Holder {
         onlyOriginalStaker(_stakeId, _staker)
     {
         uint tokenToBurn = stakeIdToTokenId[_stakeId];
+        uint indexToDelete = tokenIdToStakedIndex[tokenToBurn];
+
+        deleteStakedTokenAtIndex(indexToDelete);
         // see wht uses less gas, delete or hardcoded (and change everything to whichever is faster)
         delete tokenIdToOwner[tokenToBurn];
         delete stakeIdToTokenId[_stakeId];
@@ -183,8 +220,8 @@ contract Staking is Pausable, ERC721Holder {
     * @param _index index of the token to remove
     */
     function deleteAvailableTokenAtIndex(uint _index) private {
-        require(availableTokens.length > 0);
-        uint lastIndex = availableTokens.length - 1;
+        require(availableTokens.length > 0, "There must be tokens available for staking but currently there are none");
+        uint lastIndex = availableTokens.length.sub(1);
         // this seems weird..
         if (_index != lastIndex) {
             uint tokenToMove = availableTokens[lastIndex];
@@ -193,16 +230,41 @@ contract Staking is Pausable, ERC721Holder {
         }
 
         delete availableTokens[lastIndex];
-        availableTokens.length--;
+        availableTokens.length = availableTokens.length.sub(1);
     }
+
+    /** @dev Remove token from staked array.
+    * @param _index index of the token to remove
+    */
+    function deleteStakedTokenAtIndex(uint _index) private {
+        require(stakedTokens.length > 0, "There must be tokens staked but currently there are none");
+        uint lastIndex = stakedTokens.length.sub(1);
+        // this seems weird..
+        if (_index != lastIndex) {
+            uint tokenToMove = stakedTokens[lastIndex];
+            stakedTokens[_index] = tokenToMove;
+            tokenIdToStakedIndex[tokenToMove] = _index;
+        }
+
+        delete stakedTokens[lastIndex];
+        stakedTokens.length = stakedTokens.length.sub(1);
+    }    
 
     /** @dev Add token to available for staking list
     * @param _tokenId The id of the token that is now available for staking
     */
     function addTokenToAvailable(uint _tokenId) private {
-        uint index = availableTokens.push(_tokenId) - 1;
+        uint index = availableTokens.push(_tokenId).sub(1);
         tokenIdToAvailableIndex[_tokenId] = index;
     }
+
+    /** @dev Add token to staked tokens list 
+    * @param _tokenId The id of the token that is being staked
+    */
+    function addTokenToStaked(uint _tokenId) private {
+        uint index = stakedTokens.push(_tokenId).sub(1);
+        tokenIdToStakedIndex[_tokenId] = index;
+    }    
 }
 
 
