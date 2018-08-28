@@ -63,8 +63,6 @@ The Withdrawal Functionality, Stake Functionality, and Review functionality are 
    ganache-cli
    ```
 1. open new terminal tab
-1. clone this project and cd into the new directory
-
 1. ```
    ipfs add FirstPledgeTokenDetails.json
    ```
