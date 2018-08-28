@@ -143,8 +143,6 @@ contract('Grow review', (accounts) => {
             await instance.submitProof(web3.fromAscii('growth'), pledgeId, proofId, { from: pledgeOwner });
             await instance.assignReviewer(pledgeId, proofId, tokenId, { from: reviewer });
             const initialTokenBalance = await growTokenInstance.balanceOf.call(pledgeOwner);
-            console.log('reviewer', reviewer);
-            console.log('intial token balance', initialTokenBalance.toNumber());
             // Act
             await instance.verifyProof(proofId, true, { from: reviewer });
             // Assert

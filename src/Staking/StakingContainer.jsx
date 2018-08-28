@@ -34,15 +34,11 @@ class StakingContainer extends Component {
     populateDepositedTokens = () => {
         return this.stakingContract.methods.getAvailableTokenCount().call()
             .then(count => {
-                console.log('count of avail tokens', count);
                 for (let i = 0; i < count; i++) {
-                    console.log('token index', i);
                     this.stakingContract.methods.availableTokens(i).call()
                         .then(async token => {
-                            const tokenId = parseInt(token, 10);
+                            const tokenId = Number(token);
                             if (await this.isUsersToken(tokenId)) {
-                                console.log('token at index', i, 'is', token, 'and is users and available');
-
                                 return this.setState({
                                     depositedTokens: [...this.state.depositedTokens, token],
                                 });
@@ -58,7 +54,7 @@ class StakingContainer extends Component {
                 for (let i = 0; i < count; i++) {
                     this.stakingContract.methods.stakedTokens(i).call()
                         .then(async token => {
-                            const tokenId = parseInt(token, 10);
+                            const tokenId = Number(token);
                             if (await this.isUsersToken(tokenId)) {
                                 return this.setState({
                                     stakedTokens: [...this.state.stakedTokens, token],
@@ -71,63 +67,19 @@ class StakingContainer extends Component {
 
     isUsersToken = async (tokenId) => {
         const tokenOwner = await this.stakingContract.methods.tokenIdToOwner(tokenId).call();
-        console.log('tower', tokenOwner);
-        console.log('accounts', this.props.accounts[0]);
-        console.log(Boolean(tokenOwner));
-        console.log(tokenOwner === this.props.accounts[0]);
         return tokenOwner && tokenOwner === this.props.accounts[0];
     }
-
-    // allTokens.forEach(async (token) => {
-    //     // make sure this works or go back to then chain
-    //     try {
-    //         const tokenId = parseInt(token.tokenId);
-
-    //         const isDeposited = await this.stakingContract.methods.isTokenDeposited(tokenId).call();
-
-    //         if (isDeposited == false) {
-    //             return this.setState({
-    //                 tokensForDeposit: [...this.state.tokensForDeposit, token],
-    //             });
-    //         }
-
-    //         const isStaked = await this.stakingContract.methods.isTokenStaked(tokenId).call();
-
-    //         if (isStaked == true) {
-    //             this.setState({
-    //                 stakedTokens: [...this.state.stakedTokens, token],
-    //             })
-    //         } else {
-    //             this.setState({
-    //                 depositedTokens: [...this.state.depositedTokens, token],
-    //             })
-    //         }
-    //     } catch (err) {
-    //         console.log(err);
-    //     };
-    // });
-
+    
     approveStakingContract = (tokenId) => {
-        console.log('account', this.props.accounts[0]);
-        return this.growTokenContract.methods.approve(this.stakingContract.address, tokenId).send({ from: this.props.accounts[0] })
-        .then(receipt => console.log('receipt'))
-        .catch(console.log);
+        return this.growTokenContract.methods.approve(this.stakingContract.address, tokenId).send({ from: this.props.accounts[0] });
     }
 
     depositToken = (id) => {
         const tokenId = parseInt(id, 10);
-        console.log(tokenId);
-        console.log(typeof tokenId);
         return this.approveStakingContract(tokenId)
             .then((receipt) => {
-                console.log('receipt', receipt);
-                console.log('tokenId', tokenId);
                 return this.stakingContract.methods.deposit(tokenId).send({ from: this.props.accounts[0], gas: 300000 })
-                .then(receipt => console.log('receipt'))
-                .catch(console.log);
-            })
-            .then(receipt => console.log(receipt))
-            .catch(console.log);
+            });
     }
 
     stakeToken = (id) => {
@@ -139,14 +91,10 @@ class StakingContainer extends Component {
 
         this.growForEvents.getPastEvents('ProofSubmitted', { fromBlock, toBlock: 'latest' })
             .then(async logs => {
-                console.log(logs);
                 // TODO - make sure first block is old enough, if not get more logs
                 if (logs.length === 0) return console.log('No submitted proofs available to stake on'); // this should probs be done on mount and stored in state
                 const { returnValues } = await this.getOldestSubmittedProofFromLogs(logs);
-                console.log(returnValues.pledgeId, returnValues.proofId, tokenId);
-                await this.growContract.methods.assignReviewer(returnValues.pledgeId, returnValues.proofId, tokenId).send({from: this.props.accounts[0]})
-                    .then(receipt => console.log('receipt'))
-                    .catch(console.log);
+                return await this.growContract.methods.assignReviewer(returnValues.pledgeId, returnValues.proofId, tokenId).send({from: this.props.accounts[0]});
             });
     }
 

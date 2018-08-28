@@ -8,8 +8,9 @@ import PledgeContainer from './Pledge';
 import IpfsRetriever from '../IPFS/IpfsRetriever';
 import ContractStateRetriever from '../ContractStateRetriever';
 import { Link } from 'react-router-dom';
-import { Button } from 'grommet';
-
+import { Button, Box, Heading } from 'grommet';
+import styled from 'styled-components';
+import { StyledLink } from '../GeneralUI';
 
 const PledgeList = ({ account, numOfPledges, requiredStates }) => {
     const pledges = [];
@@ -20,6 +21,12 @@ const PledgeList = ({ account, numOfPledges, requiredStates }) => {
 
     return (
         <Fragment>
+            <Box direction="row" wrap={false} justify="between" margin={{ left: "small", right: "small" }} align="center">
+                <Heading level="3">Pledges</Heading>
+                <Box background="accent-3" border="all" round="medium" fill="vertical" pad="xsmall">
+                    <StyledLink to={`/pledges/new`}>New</StyledLink>
+                </Box>
+            </Box>
             {pledges}
         </Fragment>
     )
@@ -35,9 +42,6 @@ class Pledges extends Component {
     static contextTypes = {
         drizzle: PropTypes.object,
         drizzleStore: PropTypes.object,
-        router: PropTypes.shape({
-            history: PropTypes.object.isRequired,
-        }),
     };
 
     constructor(props) {
@@ -47,12 +51,9 @@ class Pledges extends Component {
     render() {
         return (
             <ContractStateRetriever contract="Grow" method="userAddressToNumberOfPledges" args={[this.props.accounts[0]]} render={({ contractData }) => (
-                <div>
-                    <h1>PLEDGES</h1>
-                    {/* <Button label="New Pledge" onClick={() => this.context.router.history.push('/pledges/new')} /> */}
-                    <Link to={`/pledges/new`}><Button label="New Pledge" onClick={() => ({})}/></Link>
-                    <PledgeList account={this.props.accounts[0]} numOfPledges={parseInt(contractData, 10)} requiredStates={this.props.requiredStates} />
-                </div>
+                <Box background="light-3" fill={true}>
+                    <PledgeList account={this.props.accounts[0]} numOfPledges={Number(contractData)} requiredStates={this.props.requiredStates} />
+                </Box>
             )} />
         )
     }

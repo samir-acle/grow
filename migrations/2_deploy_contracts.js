@@ -22,7 +22,7 @@ module.exports = function(deployer, network, accounts) {
     })
     .then(() => {
         return GrowToken.deployed().then(g => {
-            return g.mint(0x031a407d08e694c85e1ef4c7cbcfb1a529e05ee4f79a84fcc46f8ff36ca214e2 ,accounts[0]);
+            return g.mint(0x031a407d08e694c85e1ef4c7cbcfb1a529e05ee4f79a84fcc46f8ff36ca214e2, accounts[0]);
         });
     })
     .then(() => {
@@ -32,10 +32,17 @@ module.exports = function(deployer, network, accounts) {
     })
     .then(() => {
         return GrowToken.deployed().then(g => {
+            return g.setBurner(accounts[0]);
+        });
+    })
+    .then(() => {
+        return GrowToken.deployed().then(g => {
+            return g.burn(0, accounts[0]);
+        })
+    })
+    .then(() => {
+        return GrowToken.deployed().then(g => {
             return g.setBurner(Staking.address);
         });
     });
 };
-
-
-// TODO - deploy a library and link...

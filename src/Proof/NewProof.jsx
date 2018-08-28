@@ -24,8 +24,6 @@ class NewProof extends Component {
     submitProof = () => {
         const ipfsHashBytes32 = ipfsHashToBytes32(this.state.ipfsHash);
         
-        console.log('sending these params:', ipfsHashBytes32, this.props.pledgeId, this.props.proofId);
-
         this.contract.methods.submitProof.cacheSend(
             ipfsHashBytes32,
             this.props.pledgeId,
@@ -61,18 +59,20 @@ class NewProof extends Component {
         if(this.state.completedProof) return <Redirect to={`pledges/${this.props.pledgeId}`} />
 
         return (
-            <Box>
+            <Box direction="column" width="medium" gap="small" pad="large">
+                Upload a file that will be used as "PROOF" for completion of the pledge
                 {!this.state.ipfsHash && (
-                    <Fragment>
+                    <Box direction="column" gap="small">
                         <input id="myfiles" type="file" onChange={this.handleFileSelect} />
                         <Button label="upload" onClick={this.uploadFiles} />
-                    </Fragment>
+                    </Box>
                 )}
                 {this.state.ipfsHash && (
-                    <Fragment>
+                    <Box direction="column" gap="small">
                         {/* TODO make IPFS image retriever */}
-                        <Button label="submit" onClick={this.submitProof} />
-                    </Fragment>
+                        File uploaded.  Ready to submit the proof?
+                        <Button width="small" label="submit" onClick={this.submitProof} />
+                    </Box>
                 )}
             </Box>
         )

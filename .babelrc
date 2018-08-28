@@ -20,6 +20,7 @@
         "syntax-dynamic-import",
         "regenerator-transform",
         "transform-class-properties",
-        "grommet"
+        "grommet",
+        "styled-components"
     ]
 }

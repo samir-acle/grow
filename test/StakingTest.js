@@ -1,5 +1,4 @@
 import assertRevert from "../node_modules/openzeppelin-solidity/test/helpers/assertRevert";
-import { cloneableGenerator } from "../node_modules/redux-saga/utils";
 
 const Staking = artifacts.require('Staking');
 const GrowToken = artifacts.require('GrowToken');
@@ -102,6 +101,17 @@ contract('Staking', accounts => {
             await instance.deposit(tokenId, { from: userAccount });
             await instance.stake(stakeId, tokenId, userAccount, { from: controllerAccount });
             await assertRevert(instance.withdraw(tokenId, { from: userAccount }));
+        });
+
+        it('should not allow staking for a stakeId that has already been used', async () => {
+            await instance.deposit(0, { from: userAccount });
+            await instance.deposit(tokenId, { from: userAccount });
+            await instance.deposit(1, { from: userAccount });
+            availableTokens = await instance.getAvailableTokenCount.call();
+            const numberOfStakedTokensBefore = await instance.getStakedTokenCount.call();
+            await instance.stake(stakeId, tokenId, userAccount, { from: controllerAccount });
+
+            await assertRevert(instance.stake(stakeId, 1, userAccount, { from: controllerAccount }));
         });
     });
 

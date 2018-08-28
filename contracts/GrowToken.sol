@@ -1,13 +1,9 @@
 pragma solidity ^0.4.24;
 
 import "openzeppelin-solidity/contracts/token/ERC721/ERC721Token.sol";
-import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
-// definitley pausable
+import "openzeppelin-solidity/contracts/lifecycle/Pausable.sol";
 
-// TODO - check order of inheritance
-//  TODO - not usding uri? maybe better way to do this...
-// TODO - write quick and easy tests
-contract GrowToken is ERC721Token("GrowToken", "GROW"), Ownable {
+contract GrowToken is ERC721Token("GrowToken", "GROW"), Pausable {
 
         // ============
     // EVENTS:
@@ -31,16 +27,16 @@ contract GrowToken is ERC721Token("GrowToken", "GROW"), Ownable {
     // MODIFIERS:
     // ============
     /**
-    * @dev Throws if called by any account other than the controller.
-    */
+      * @dev Throws if called by any account other than the controller.
+      */
     modifier onlyMinter() {
         require(msg.sender == minter, "Only the controller can call this function");
         _;
     }
 
-     /**
-    * @dev Throws if called by any account other than the controller.
-    */
+    /**
+      * @dev Throws if called by any account other than the controller.
+      */
     modifier onlyBurner() {
         require(msg.sender == burner, "Only the controller can call this function");
         _;
@@ -66,6 +62,7 @@ contract GrowToken is ERC721Token("GrowToken", "GROW"), Ownable {
       */
     function mint (bytes32 _tokenDetailsHash, address _toAddress)
         public
+        whenNotPaused
         onlyMinter
     {
         uint tokenId = tokenDetails.push(_tokenDetailsHash).sub(1);
@@ -76,11 +73,12 @@ contract GrowToken is ERC721Token("GrowToken", "GROW"), Ownable {
     /** @dev Burns a token.
       * @param _tokenId id of the token to be burned.
       */
-    function burn(uint _tokenId)
+    function burn(uint _tokenId, address _tokenOwner)
         public
+        whenNotPaused
         onlyBurner
     {
-        _burn(msg.sender, _tokenId);
+        _burn(_tokenOwner, _tokenId);
         emit GrowTokenBurned(msg.sender, tokenDetails[_tokenId], _tokenId);
     } 
 

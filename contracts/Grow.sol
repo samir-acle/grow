@@ -41,19 +41,14 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
     // ============
     // TODO - double check where these go
     modifier stakingIsEnabled() {
-        require(staking != address(0));
-        require(!staking.paused());
+        require(staking != address(0) && !staking.paused(), "The staking address must be a real address and not paused");
         _;
     }
 
     modifier stakingNotEnabled() {
-        require(staking == address(0) || staking.paused());
+        require(staking == address(0) || staking.paused(), "The staking address must not be set or must be paused");
         _;
     }
-
-    //  TODO -  should this be percentage of collateral?  Probs because reviewer is risking more and putting more away and losing potential gains
-    // 10 finney for now...
-    // definitely should be adjusted based on gas price/cost of approving (rather than price of total collateral)
 
     constructor (uint _proofFee, address _growTokenAddress) public {
         growToken = GrowToken(_growTokenAddress);
@@ -61,30 +56,31 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
     }
 
     /** @dev Sets the growToken contract address. Only owner is authorized.
-        * @param _address The address of the grow token contract to use.
-        */
-    function setGrowToken(address _address) public onlyOwner {
+      * @param _address The address of the grow token contract to use.
+      */
+    function setGrowToken(address _address) external onlyOwner {
         growToken = GrowToken(_address);
         emit GrowTokenContractUpdated(msg.sender, _address);
     }
 
     /** @dev Sets the staking contract address. Only owner is authorized.
-        * @param _address The address of the staking contract to use.
-        */
-    function setStaking(address _address) public onlyOwner {
+      * @param _address The address of the staking contract to use.
+      */
+    function setStaking(address _address) external onlyOwner {
         staking = Staking(_address);
         emit StakingContractUpdated(msg.sender, _address);
     }
 
     /** @dev Sets the proofFee. Only owner is authorized.
-        * @param _proofFee The new proof fee in wei.
-        */
-    function setProofFee(uint _proofFee) public onlyOwner {
+      * @param _proofFee The new proof fee in wei.
+      */
+    function setProofFee(uint _proofFee) external onlyOwner {
         proofFee = _proofFee;
         emit ProofFeeUpdated(msg.sender, _proofFee);
     }
 
     /** @dev Creates a pledge and proofs.
+      * @dev Proof expirations should be in ascending order
       * @param _proofExpirations The expiration date for each proof. Needs to be sorted in ascending order.
       * @param _hashDigest The ipfs hash minus the function and size.
       * @return pledgeIndex The index in the pledges array` of the created pledge.
@@ -93,30 +89,21 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
         uint[] _proofExpirations,
         bytes32 _hashDigest
     )
-        public
+        external
         payable
         whenNotPaused
         returns(bytes32 pledgeId)
     {
-        uint numOfProofs = _proofExpirations.length;
+        uint numOfProofs = _proofExpirations.length;  // Will restrict this length as part of future story
         uint collateralPerProof = msg.value.div(numOfProofs);
 
         require(
             ableToCoverFees(collateralPerProof), 
             "Must have enought collateral to cover fees"
         );
-        // check gas costs of either way
-        // require(
-        //     inAscendingOrder(_proofExpirations), 
-        //     "Proof expirations must be sorted with soonest expiration first"
-        // );
-
-        // should mayeb add total to pledge
-        // remainder will be added to the pot? which lives where probably here 
 
         pledgeId = createPledge(_hashDigest, numOfProofs);
         createEmptyProofs(pledgeId, _proofExpirations, collateralPerProof);
-        // TODO - hardcode ipfs thing here
         mintTokenIfFirstPledge();
         return pledgeId;
     }
@@ -131,7 +118,7 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
         bytes32 _pledgeId,
         bytes32 _proofId
     )
-        public
+        external
         whenNotPaused
         onlyPledgeOwner(_pledgeId)
         onlyIsProof(_proofId)
@@ -148,21 +135,21 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
     function expireProof(
         bytes32 _proofId
     )
-        public
+        external
         whenNotPaused
         onlyIsProof(_proofId)
         onlyActiveProof(_proofId)
-        // onlyExpired(_proofId)
         onlyCurrentProofOrBefore(_proofId)
+        // onlyExpired(_proofId)
     {
         uint collateral = proofIdToProof[_proofId].collateral;
-        require(address(this).balance >= collateral);
+        require(address(this).balance >= collateral, "There must be enough balance in the contract to repay the collateral");
         clearCollateral(_proofId);
         uint remainingCollateral = rewardSenderWithProofFee(collateral);
 
         if (proofIdToProof[_proofId].state == ProofState.Pending) {
             addToPot(remainingCollateral);
-            // this line might allow for weird stuff, like if you expire something not in order
+
             uint nextProofIndex = pledgeIdToNextProofIndex[proofIdToProof[_proofId].pledgeId];
             uint expiredIndexInPledge = proofIdToProof[_proofId].indexInPledge;
             if (expiredIndexInPledge >= nextProofIndex) {
@@ -185,14 +172,14 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
         bytes32 _proofId,
         bool _approved
     )
-        public
+        external
         whenNotPaused
         onlyProofState(_proofId, ProofState.Assigned)
         onlyReviewer(_proofId)
         onlyNotExpired(_proofId)
     {
         uint collateral = proofIdToProof[_proofId].collateral;
-        require(address(this).balance >= collateral);
+        require(address(this).balance >= collateral, "There must be enough balance in the contract to repay the collateral");
         clearCollateral(_proofId);
         uint remainingCollateral = rewardSenderWithProofFee(collateral);
 
@@ -205,9 +192,6 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
             updateProofState(_proofId, ProofState.Rejected);
             addToPot(remainingCollateral);
         }
-
-        // deleteReviewerProofAtIndex(msg.sender, proofIdToReviewerIndex[_proofId]); 
-        // addressToAssignedProofs[msg.sender].push(_proofId) - 1;
 
         staking.releaseStake(_proofId, msg.sender);
 
@@ -260,33 +244,24 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
     ) 
         private 
     {
-        // TODO - improve gas cost here by forming in memory proof array then updating once
-        bytes32[] storage proofs = pledgeIdToPledge[_pledgeId].proofs;
+        bytes32[] memory proofs = pledgeIdToPledge[_pledgeId].proofs;
 
         for (uint i = 0; i < _proofExpirations.length; i++) {
             bytes32 proofId = createEmptyProof(_pledgeId, _proofExpirations[i], _collateralPerProof, i + 1);
             proofs[i] = proofId;
         }
+
+        pledgeIdToPledge[_pledgeId].proofs = proofs;
     }
 
+    /** @dev Get the pot balance in wei.
+      */
     function getPotAmount() public view onlyOwner returns(uint) {
         return pot;
     }
 
-// this could be in a library?
-// is there better way to do this so dont have to loop?
-// validate length is below certain size?
-    function inAscendingOrder(uint[] numberArray) private returns (bool isSorted) {        
-        isSorted = true;
-
-        for (uint i = 1; i < numberArray.length; i++) {
-            if (numberArray[i] < numberArray[i - 1]) {
-                isSorted = false;
-                break;
-            }
-        }
-    }
-
+    /** @dev Mint a new token for users after creating their first pledge.
+      */
     function mintTokenIfFirstPledge() private returns (bool tokenWasMinted) {
         if (userAddressToNumberOfPledges[msg.sender] == 1) {
             growToken.mint(FIRST_PLEDGE_HASH, msg.sender);
@@ -294,10 +269,16 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
         }
     }
 
-    function ableToCoverFees(uint _amountPerProof) private returns (bool isEnough) {
+    /** @dev Determine whether the eth sent is enough to cover the fees.
+      */
+    function ableToCoverFees(uint _amountPerProof) private view returns (bool isEnough) {
         return _amountPerProof >= proofFee;
     }
 
+    /** @dev Treat the proof as if it was approved.
+      * @param _proofId the proofId to be approved
+      * @param _amount the collateral to be refunded
+      */
     function autoApproveProof(bytes32 _proofId, uint _amount) private {
         updateProofState(_proofId, ProofState.Accepted);
         refundProofOwner(_proofId, _amount);
@@ -308,22 +289,35 @@ contract Grow is Pausable, UserAccount, Proof, Pledge {
         );
     }
 
+    /** @dev Update the proof owners account balance
+      * @param _proofId the proofId to be approved
+      * @param _amount the collateral to be refunded
+      */
     function refundProofOwner(bytes32 _proofId, uint _amount) private {
         address pledgeOwner = pledgeIdToPledge[proofIdToProof[_proofId].pledgeId].owner;
         increaseBalance(_amount, pledgeOwner);
     }
 
+    /** @dev Increase the balance of the pot
+      * @param _amount the amount to add to the pot
+      */
     function addToPot(uint _amount) private {
         pot = pot.add(_amount);
         emit PotIncrease(_amount);
     }
 
+    /** @dev Remove collateral from a proof
+      * @param _proofId the proof to clear collateral for
+      */
     function clearCollateral(bytes32 _proofId) private {
         proofIdToProof[_proofId].collateral = 0;
     }
 
-    function rewardSenderWithProofFee(uint collateral) private returns (uint) {
+    /** @dev Update senders balance with the proofFee
+      * @param _collateral the total collateral to take the proofFee from
+      */
+    function rewardSenderWithProofFee(uint _collateral) private returns (uint) {
         increaseBalance(proofFee, msg.sender);
-        return collateral.sub(proofFee);
+        return _collateral.sub(proofFee);
     }
 }

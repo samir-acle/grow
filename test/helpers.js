@@ -9,9 +9,7 @@ export const getPledgeAndProofId = async (contract, options = {}) => {
     let totalCollateral = web3.toWei(options.totalCollateral || 20 * proofExpirations.length, 'finney');
     let hash = web3.fromAscii('pledge details hash');
 
-    console.log('before init pledge');
     await contract.initPledge(proofExpirationsSec, hash, { from: pledgeOwner, value: totalCollateral });
-    console.log('after init pledge');
 
     const numOfPledges = await contract.userAddressToNumberOfPledges(pledgeOwner);
     const pledgeId = Web3Utils.soliditySha3(pledgeOwner, numOfPledges.toNumber());

@@ -37,12 +37,12 @@ contract Pledge is Pausable, Proof {
     }
 
     modifier onlyPledgeOwner(bytes32 _pledgeId) {
-        require(msg.sender == pledgeIdToPledge[_pledgeId].owner);
+        require(msg.sender == pledgeIdToPledge[_pledgeId].owner, "Sender must be the owner of the pledge");
         _;
     }
 
     modifier onlyNotPledgeOwner(bytes32 _pledgeId) {
-        require(msg.sender != pledgeIdToPledge[_pledgeId].owner);
+        require(msg.sender != pledgeIdToPledge[_pledgeId].owner, "Sender must not be the owner of the pledge");
         _;
     }
 
@@ -52,35 +52,26 @@ contract Pledge is Pausable, Proof {
     }
 
     modifier onlyPledgeState(bytes32 _pledgeId, PledgeState state) {
-        require(hasPledgeState(_pledgeId, state));
+        require(hasPledgeState(_pledgeId, state), "The pledge is in the wrong state to complete this action");
         _;
     }
 
     modifier onlyIfPreviousProofNotPending(bytes32 _pledgeId) {
-        require(previousProofIsNotPending(_pledgeId));
+        require(previousProofIsNotPending(_pledgeId), "The previous proof must be submitted or expired first");
         _;
     }
 
     modifier onlyCurrentProofOrBefore(bytes32 _proofId) {
         uint currentProofIndex = pledgeIdToNextProofIndex[proofIdToProof[_proofId].pledgeId];
-        require(proofIdToProof[_proofId].indexInPledge <= currentProofIndex);
+        require(proofIdToProof[_proofId].indexInPledge <= currentProofIndex, "Proofs must be submitted in order");
         _;
     }
 
-    function isPledgeOwner(bytes32 _pledgeId) internal returns (bool isOwner) {
-        return msg.sender == pledgeIdToPledge[_pledgeId].owner;
-    }
-
-    function proofMatchesPledge(bytes32 _proofId, bytes32 _pledgeId) private returns (bool isValid) {
-        return proofIdToProof[_proofId].pledgeId == _pledgeId;
-    }
-
-    function hasPledgeState(bytes32 _pledgeId, PledgeState _requiredState) internal returns (bool isValidState) {
-        return pledgeIdToPledge[_pledgeId].state == _requiredState;
-    }
-
+    /** @dev Get details for a pledge.
+      * @param _pledgeId The pledgeId to return details for
+      */
     function getPledge(bytes32 _pledgeId)
-        public 
+        external 
         view
         onlyIsPledge(_pledgeId)
         returns(
@@ -102,6 +93,32 @@ contract Pledge is Pausable, Proof {
         );
     }
 
+
+    /** @dev Get the total number of pledges
+      */
+    function getPledgeCount() 
+        external
+        view
+        returns(uint count)
+    {
+        return pledges.length;
+    }
+
+    /** @dev Get the pledgeId that is at the index in the pledges array
+      * @param _index Index of the pledge in the pledges array
+      */
+    function getPledgeAtIndex(uint _index)
+        external
+        view
+        returns(bytes32 pledgeId)
+    {
+        return pledges[_index];
+    }
+
+    /** @dev Create a pledge and initialize proofs array.
+      * @param _ipfsHash The ipfsHash for the pledge details
+      * @param _numOfProofs The number of proofs in the pledge
+      */
     function createPledge(
         bytes32 _ipfsHash,
         uint _numOfProofs
@@ -120,12 +137,42 @@ contract Pledge is Pausable, Proof {
         pledgeIdToPledge[pledgeId].proofs = new bytes32[](_numOfProofs);
 
         userAddressToNumberOfPledges[msg.sender] = userAddressToNumberOfPledges[msg.sender].add(1);
-        // can inline this above
 
         emit NewPledge(msg.sender, pledgeIdToPledge[pledgeId].index, _ipfsHash);
         return pledgeId;
     }
 
+    /** @dev Return true if the previous proof for the pledge has not beed submitted or expired
+      * @param _pledgeId The pledge id
+      */
+    function previousProofIsNotPending(bytes32 _pledgeId) internal view returns (bool wasCompleted) {
+        if (pledgeIdToNextProofIndex[_pledgeId] > 0) {
+            uint lastProofIndex = pledgeIdToNextProofIndex[_pledgeId].sub(1);
+            bytes32 lastProofId = pledgeIdToPledge[_pledgeId].proofs[lastProofIndex];
+            return proofIdToProof[lastProofId].state != ProofState.Pending;
+        } else {
+            return true;
+        }
+    }
+
+    /** @dev Check if sender is pledgeOwner
+      * @param _pledgeId The pledge id
+      */
+    function isPledgeOwner(bytes32 _pledgeId) internal view returns (bool isOwner) {
+        return msg.sender == pledgeIdToPledge[_pledgeId].owner;
+    }
+
+    /** @dev Return true if pledge is in the state provided
+      * @param _requiredState The PledgeState
+      * @param _pledgeId The pledge id
+      */
+    function hasPledgeState(bytes32 _pledgeId, PledgeState _requiredState) internal view returns (bool isValidState) {
+        return pledgeIdToPledge[_pledgeId].state == _requiredState;
+    }
+
+    /** @dev Check if plegde already exists with the id
+      * @param _pledgeId The pledge id
+      */
     function isPledge(bytes32 _pledgeId)
         private 
         view
@@ -135,41 +182,11 @@ contract Pledge is Pausable, Proof {
         return (pledges[pledgeIdToPledge[_pledgeId].index] == _pledgeId);
     }
 
-    function getPledgeCount() 
-        public
-        view
-        returns(uint count)
-    {
-        return pledges.length;
-    }
-
-    function getPledgeAtIndex(uint index)
-        public
-        view
-        returns(bytes32 pledgeId)
-    {
-        return pledges[index];
-    }
-
-    function previousProofIsNotPending(bytes32 _pledgeId) internal returns (bool wasCompleted) {
-        if (pledgeIdToNextProofIndex[_pledgeId] > 0) {
-            uint lastProofIndex = pledgeIdToNextProofIndex[_pledgeId].sub(1);
-            bytes32 lastProofId = pledgeIdToPledge[_pledgeId].proofs[lastProofIndex];
-            return proofIdToProof[lastProofId].state != ProofState.Pending;
-        } else {
-            return true;
-        }
+    /** @dev Check if proof is a part of the pledge
+      * @param _proofId The proof id
+      * @param _pledgeId The pledge id
+      */
+    function proofMatchesPledge(bytes32 _proofId, bytes32 _pledgeId) private view returns (bool isValid) {
+        return proofIdToProof[_proofId].pledgeId == _pledgeId;
     }
 }
-
-
-
-// As pledge owner, I need see my active pledges
-// As pledge owner, I need submit proof for each pledge
-// As a pledge owner, I need to dispute rejected? proofs
-// As 
-
-// As a pledge owner, I need to stake my tokens?
-// choose one and submit a proof (assume know proofId)
-
-// if ordered double linked list then what does that buy? 

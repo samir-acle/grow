@@ -14,9 +14,7 @@ class IpfsRetriever extends Component {
     }
 
     componentDidMount = async() => {
-        console.log('getting data from ipfs:', this.props.hash);
         const data = await this.getFromIpfs(this.props.hash);
-        console.log('data:', data);
         this.setState({ data });
     }
 
@@ -24,9 +22,7 @@ class IpfsRetriever extends Component {
 
     getFromIpfs = async (hash) => {
         const ipfsHash = bytes32ToIpfsHash(hash);
-        console.log('ipfs hash');
         const files = await ipfs.get(ipfsHash);
-        console.log('ipfs files');
         return JSON.parse(files[0].content.toString('utf8'));
     }
 

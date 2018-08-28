@@ -16,10 +16,10 @@ import {
     daysInSeconds
 } from './helpers';
 
- /* 
-    These are tests for the public entry to the smart contract. These cover functionality
-    found in the Proof and Pledge contracts.
-    */
+/* 
+These are tests for the public entry to the smart contract. These cover functionality
+found in the Proof and Pledge contracts.
+*/
 contract('Grow', accounts => {
     let instance, growTokenInstance, stakingInstance;
     const [contractOwner, pledgeOwner, otherAccount] = accounts;
@@ -78,8 +78,6 @@ contract('Grow', accounts => {
     */
     describe('initializing a pledge happy path', async () => {
         let proofExpirations, hashDigest, pledgeId, createdPledge;
-
-        // QmPkEJbH4rhSRtupCosegxQjf29vwATpFHzcU9qUnK3K4b
 
         before(async () => {
             // Arrange
@@ -410,20 +408,13 @@ contract('Grow', accounts => {
                 const proofExpirations = [daysInFuture(now)];
                 const { pledgeId, proofId } = await getPledgeAndProofId(instance, { proofExpirations, pledgeOwner });
                 await instance.submitProof(web3.fromAscii('growth'), pledgeId, proofId, { from: pledgeOwner });
-                console.log('before assign reviewer');
                 await instance.assignReviewer(pledgeId, proofId, tokenId, { from: otherAccount });
-                console.log('after assign reviewer');
                 increaseTime(daysInFuture * 2);
 
                 const tokenIsStaked = await stakingInstance.isTokenStaked.call(tokenId);
-                console.log('token', tokenId, tokenId ? 'is staked' : 'is not staked');
                 const staker = await stakingInstance.getStaker.call(proofId);
-                console.log('staker', staker);
-                console.log('reviewer', otherAccount);
                 // Act
-                console.log('before expire');
                 await instance.expireProof(proofId, { from: contractOwner });
-                console.log('after expire');
                 // Assert
                 const [, , , , , , status] = await instance.getProof.call(proofId);
                 expect(status.toNumber()).to.equal(3);
@@ -438,9 +429,7 @@ contract('Grow', accounts => {
                 const tokenCountBeforeExpiration = await growTokenInstance.getOwnedTokenCount.call({ from: stakingInstance.address });
                 expect(tokenCountBeforeExpiration.toNumber()).to.equal(1);
                 // Act
-                console.log('before expire');
                 await instance.expireProof(proofId, { from: contractOwner });
-                console.log('after expire');
                 // Assert
                 const tokenCountAfterExpiration = await growTokenInstance.getOwnedTokenCount.call({ from: stakingInstance.address });
                 expect(tokenCountAfterExpiration.toNumber()).to.equal(0);
@@ -453,9 +442,7 @@ contract('Grow', accounts => {
                 await instance.assignReviewer(pledgeId, proofId, tokenId, { from: otherAccount });
                 increaseTime(daysInFuture * 2);
                 // Act
-                console.log('before expire');
                 await instance.expireProof(proofId, { from: contractOwner });
-                console.log('after expire');
                 // Assert
                 const proofOwnerBalance = await instance.getBalance.call({ from: pledgeOwner });
                 const otherAccountBalance = await instance.getBalance.call({ from: contractOwner });

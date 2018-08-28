@@ -3,22 +3,34 @@ import PropTypes from 'prop-types';
 import moment from 'moment';
 import { drizzleConnect } from 'drizzle-react';
 import _ from 'lodash';
-import { Box, Button } from 'grommet';
+import { Box, Button, Heading, Text, Paragraph } from 'grommet';
 import IpfsRetriever from '../IPFS/IpfsRetriever';
 import ContractStateRetriever from '../ContractStateRetriever';
 import { Link } from 'react-router-dom';
 import Proofs from '../Proof/Proofs';
 import { PledgeState } from '../constants';
+import { StyledLink } from '../GeneralUI';
+
+const PledgeDetailItem = ({ label, value }) => {
+    return (
+        <Box direction="row" justify="start">
+            <Box width="small" margin={{ right: "medium" }}><Text color="neutral-1" textAlign="end">{label}: </Text></Box>
+            <Box margin={{ left: "small", right: "small" }} fill="true"><Paragraph textAlign="start" margin={{ top: "none", bottom: "small" }}>{value}</Paragraph></Box>
+        </Box>
+    )
+}
 
 export const PledgeDetails = ({ title, what, where, when, why }) => {
     return (
-        <Box>
-            <h2>Pledge Details</h2>
-            <p>Title: {title}</p>
-            <p>What: {what}</p>
-            <p>Where: {where}</p>
-            <p>When: {when}</p>
-            <p>Why: {why}</p>
+        <Box pad="large">
+            <Box direction="column" border="all" round="small" width="large">
+                <Box><Heading level="2" textAlign="center" color="neutral-2">Pledge Details</Heading></Box>
+                <PledgeDetailItem label="Title" value={title} />
+                <PledgeDetailItem label="What" value={what} />
+                <PledgeDetailItem label="Where" value={where} />
+                <PledgeDetailItem label="When" value={when} />
+                <PledgeDetailItem label="Why" value={why} />
+            </Box>
         </Box>
     )
 }
@@ -37,9 +49,12 @@ const PledgeListElement = ({ pledgeData, id }, context) => {
     return (
         <Box>
             <IpfsRetriever hash={pledgeData.metadata} render={({ data }) => (
-                <h2>{data.title}</h2>
+                <Box border={{ color: 'accent-2', side: 'bottom', size: 'small' }} margin={{ left: 'small' }}>
+                    <StyledLink to={`/pledges/${id}`}>
+                        <Heading level="4" color="brand" truncate={true} margin="xsmall">{data.title}</Heading>
+                    </StyledLink>
+                </Box>
             )} />
-            <Link to={`/pledges/${id}`}>View Pledge</Link>
             {/* <Button label="view" onClick={() => context.router.history.push(`/pledges/${id}`)} /> */}
         </Box>
     )
@@ -56,27 +71,19 @@ export const PledgeView = (props) => {
 
     return (
         <ContractStateRetriever contract="Grow" method="getPledge" args={[id]} render={({ contractData }) => (
-            <Box>
+            <Box width="large" pad="small" direction="column" gap="small">
                 <Pledge pledgeData={contractData} />
                 <Proofs proofIds={contractData.proofs} pledgeId={id} />
             </Box>
-        )}/>
+        )} />
     )
 }
 
 const Pledge = ({ pledgeData }) => {
     return (
-        <Box>
-            <Box>
-                <p>owner: {pledgeData.owner}</p>
-                <p>collateral: {pledgeData.collateral}</p>
-                <p>numOfProofs: {pledgeData.numOfProofs}</p>
-            </Box>
-
-            <IpfsRetriever hash={pledgeData.metadata} render={({ data }) => (
-                <PledgeDetails {...data} />
-            )} />
-        </Box>
+        <IpfsRetriever hash={pledgeData.metadata} render={({ data }) => (
+            <PledgeDetails {...data} />
+        )} />
     )
 };
 
@@ -102,8 +109,6 @@ PledgeContainer.contextTypes = {
     drizzle: PropTypes.object,
     drizzleStore: PropTypes.object,
 };
-
-// prop types
 
 const mapDispatchToProps = dispatch => {
     return {
