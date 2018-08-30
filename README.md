@@ -46,8 +46,10 @@ The Withdrawal Functionality, Stake Functionality, and Review functionality are 
 * install ganache-cli
 
    ```npm install -g ganache-cli```
+   
+* install parcel
 
-
+   ```npm install -g parcel-bundler```
 ## Startup Instructions
 1.   open terminal of choice
 1. ```
